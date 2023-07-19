@@ -1,0 +1,5 @@
+ec_ginkoia:
+    resource: "@ecGinkoiaBundle/src/Controller/"
+    type:     annotation
+    prefix:   /
+
