@@ -86,7 +86,7 @@ class connector
             $categoryFolder->save($this->getMySign(__LINE__));
             $this->collect->addInfo('On a créé le dossier arborescent pour la diffusion '.$this->diffusion_key);
         } else {
-            $this->collect->addInfo('On récupère le dossier arborescent pour la diffusion '.$this->diffusion_key);
+            // $this->collect->addInfo('On récupère le dossier arborescent pour la diffusion '.$this->diffusion_key);
             $categoryFolder = Folder::getByPath('/Category/CategoryDiffusion/'.$this->diffusion_key);
         }
         //diffusion
@@ -102,7 +102,7 @@ class connector
             $diff->save($this->getMySign(__LINE__));
             $this->collect->addInfo('On a créé la diffusion '.$this->diffusion_key);
         } else {
-            $this->collect->addInfo('On récupère la diffusion '.$this->diffusion_key);
+            // $this->collect->addInfo('On récupère la diffusion '.$this->diffusion_key);
             $diff = DataObject::getByPath('/Diffusion/'.$this->diffusion_key);
         }
         //maj id de dossier arbo si pas fait
@@ -138,10 +138,19 @@ class connector
             throw new Exception('Please configure unconfigured key folderDiffusion');
         }
         $folderDiffusionId = $wss;
-        $folderDiffusion = DataObject::getById($folderDiffusionId);
+        if (!$folderDiffusion = Outils::getCache('object_' . $folderDiffusionId)) {
+            $folderDiffusion = DataObject::getById($folderDiffusionId);
+            Outils::putCache('object_' . $folderDiffusionId, $folderDiffusion);
+        }
+       
+        // $folderDiffusion = DataObject::getById($folderDiffusionId);
 
-        $this->diffusion_path = $folderDiffusion->getPath() . $folderDiffusion->getKey() . '/' . $this->diffusion_key;
-        $this->diffusion = DataObject::getByPath($this->diffusion_path);
+        $key = $folderDiffusion->getPath() . $folderDiffusion->getKey() . '/' . $this->diffusion_key;
+        // $this->diffusion = DataObject::getByPath($this->diffusion_path);
+        if (!$this->diffusion = Outils::getCache('object_' . $key)) {
+            $this->diffusion = DataObject::getById($key);
+            Outils::putCache('object_' . $key, $this->diffusion);
+        }
         //verify existence of object
         if (!is_object($this->diffusion)) {
             $this->diffusion = $this->getMyDiffusion();

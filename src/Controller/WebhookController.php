@@ -54,8 +54,11 @@ class WebhookController extends FrontendController
         $objHook->setHideUnpublished(false);
         $Obj = $objHook->getObjectHistory();
         $stat = $objHook->getOrder_state();
+        $ts = time();
+        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START', 3);
         $configPaymentValide = json_decode(Dataobject::getByPath('/Config/paiement_valide')->getValeur(), true);
         if (!in_array($stat->getId(), $configPaymentValide)) {
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Mode paiement non valide', 3);
             return true;
         }
 
@@ -63,10 +66,13 @@ class WebhookController extends FrontendController
  
         if ($Obj->getClassName() == 'order') {
             foreach ($Obj->getCrossid() as $crossid) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid, 3);
                 if ($diffusion->getId() != $crossid->getElementId()) {
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' non traité par la diffusion '.$diffusion->getId(), 3);
                     continue;
                 }
                 
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' lancement de la createOrder p la diffusion '.$diffusion->getId(), 3);
                 $this->createOrder($Obj);
             }
         }

@@ -152,6 +152,30 @@ class InstallController extends FrontendController
                 ->setTypeConfig('checkbox')
                 ->save($connector->getMySign(__LINE__));
         }
+        // Utiliser le fichier des promotions
+        if (!DataObject::getByPath('/Diffusion/ecGinkoia/ecGinkoiaUseOC')) {
+            $config = new DataObject\Config();
+            $config->setParentID($diff->getId())
+                ->setKey('ecGinkoiaUseOC')
+                ->setIdconfig('ecGinkoiaUseOC')
+                ->setName('Utiliser le fichier des opérations commerciales')
+                ->setValeur(0)
+                ->setPublished(true)
+                ->setTypeConfig('checkbox')
+                ->save($connector->getMySign(__LINE__));
+        }
+
+        if (!Dataobject::getByPath('/Diffusion/ecGinkoia/diffusion_automatique_ginkoia')) {
+            $config = new DataObject\Config();
+            $config->setParentID($diff->getId());
+            $config->setKey('diffusion_automatique_ginkoia');
+            $config->setIdconfig('diffusion_automatique_ginkoia');
+            $config->setPublished(false);
+            $config->setName('Choix des diffusions automatique ginkoia');
+            $config->setTypeConfig('select_multiple_class');
+            $config->setTypeList('diffusion');
+            $config->save();
+        }
 
         return true;
 
@@ -211,7 +235,7 @@ class InstallController extends FrontendController
             $action->setParentID(WebsiteSetting::getByName('folderAction')->getData());
             $action->setKey('updateOrderHistory ecGinkoia');
             $action->setName('updateOrderHistory ecGinkoia');
-            $action->setAction(array('\bundles\ecGinkoiaBundle\Controller\webhookController::hookUpdateOrderHistory'));
+            $action->setAction(array('\bundles\ecGinkoiaBundle\Controller\WebhookController::hookUpdateOrderHistory'));
             $action->setDescription('updateOrderHistory ecGinkoia');
             $action->setPublished(true);
             $action->save();
@@ -263,23 +287,6 @@ class InstallController extends FrontendController
         $diff = $connector->getMyDiffusion();
         $id_folder_cron = WebsiteSetting::getByName('folderCron')->getData();
 
-        // Crons de MAJ du Pim
-        if (!Dataobject::getByPath('/Cron/ecGinkoia_MAJ')) {
-            $cron = new DataObject\Cron();
-            $cron->setKey('ecGinkoia_MAJ')
-                ->setPrefix('ecGinkoia_MAJ');
-        } else {
-            $cron = Dataobject::getByPath('/Cron/ecGinkoia_MAJ');
-        }
-        $cron->setParentID($id_folder_cron)
-            ->setCommentaire('MAJ du catalogue, stock et prix de Ginkoia vers Middle')
-            ->setListStages('MAJGinkoia')
-            ->setToken('TOKENGINKO')
-            ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFile','\bundles\ecGinkoiaBundle\src\ecProduct::cronFillCatalog','\bundles\ecGinkoiaBundle\src\ecProduct::cronUpdateStock',])
-            ->save($connector->getMySign(__LINE__));
-
-
         // Crons de récupération et dépôt des fichiers
         if (!Dataobject::getByPath('/Cron/ecGinkoia_sync')) {
             $cron = new DataObject\Cron();
@@ -289,11 +296,62 @@ class InstallController extends FrontendController
             $cron = Dataobject::getByPath('/Cron/ecGinkoia_sync');
         }
         $cron->setParentID($id_folder_cron)
-            ->setCommentaire('Syncronisation des fichiers de Ginkoia')
+            ->setCommentaire('Ginkoia : Syncronisation des fichiers')
             ->setListStages('SyncGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
             ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronSyncGinkoia'])
+            ->save($connector->getMySign(__LINE__));
+
+        
+        // Crons de MAJ du catalogue Ginkoia
+        if (!Dataobject::getByPath('/Cron/ecGinkoia_catalogue')) {
+            $cron = new DataObject\Cron();
+            $cron->setKey('ecGinkoia_catalogue')
+                ->setPrefix('ecGinkoia_catalogue');
+        } else {
+            $cron = Dataobject::getByPath('/Cron/ecGinkoia_catalogue');
+        }
+        $cron->setParentID($id_folder_cron)
+            ->setCommentaire('Ginkoia : MAJ du catalogue')
+            ->setListStages('CatalogueGinkoia')
+            ->setToken('TOKENGINKO')
+            ->setPublished(true)
+            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFile','\bundles\ecGinkoiaBundle\src\ecProduct::cronFillCatalog'])
+            ->save($connector->getMySign(__LINE__));
+
+            
+        // Crons de MAJ des stock Ginkoia
+        if (!Dataobject::getByPath('/Cron/ecGinkoia_stock')) {
+            $cron = new DataObject\Cron();
+            $cron->setKey('ecGinkoia_stock')
+                ->setPrefix('ecGinkoia_stock');
+        } else {
+            $cron = Dataobject::getByPath('/Cron/ecGinkoia_stock');
+        }
+        $cron->setParentID($id_folder_cron)
+            ->setCommentaire('Ginkoia : MAJ des stock')
+            ->setListStages('StockGinkoia')
+            ->setToken('TOKENGINKO')
+            ->setPublished(true)
+            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFileStock','\bundles\ecGinkoiaBundle\src\ecProduct::cronUpdateStock',])
+            ->save($connector->getMySign(__LINE__));
+
+            
+        // Crons de MAJ des prix Ginkoia
+        if (!Dataobject::getByPath('/Cron/ecGinkoia_price')) {
+            $cron = new DataObject\Cron();
+            $cron->setKey('ecGinkoia_price')
+                ->setPrefix('ecGinkoia_price');
+        } else {
+            $cron = Dataobject::getByPath('/Cron/ecGinkoia_price');
+        }
+        $cron->setParentID($id_folder_cron)
+            ->setCommentaire('Ginkoia : MAJ des prix')
+            ->setListStages('PriceGinkoia')
+            ->setToken('TOKENGINKO')
+            ->setPublished(true)
+            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFilePrice','\bundles\ecGinkoiaBundle\src\ecProduct::cronUpdatePrice',])
             ->save($connector->getMySign(__LINE__));
 
         return true;

@@ -4,6 +4,7 @@ namespace bundles\ecGinkoiaBundle\src;
 use Pimcore\Model\WebsiteSetting;
 use Pimcore\Model\DataObject\Data\ObjectMetadata;
 use Pimcore\Model\DataObject;
+use Pimcore\Model\DataObject\Data\ElementMetadata;
 use bundles\ecGinkoiaBundle\src\ecTimer;
 use bundles\ecGinkoiaBundle\src\connector;
 use bundles\ecGinkoiaBundle\src\ecCollect;
@@ -15,7 +16,7 @@ use Exception;
 use phpseclib3\Net\SFTP;
 use Pimcore\Model\DataObject\Product;
 
-class ecProduct
+class ecProduct extends FrontendController
 {
     /**
      * @var bundles\ecGinkoiaBundle\src\ecCustomer
@@ -32,9 +33,6 @@ class ecProduct
 
     public $config;
     public $trans_stream;
-
-
-    
     
     public $catalog_name = 'catalogue_ginkoia';
     public $categorie_name = 'categorie_ginkoia';
@@ -42,12 +40,16 @@ class ecProduct
     public $prix_name = 'prix_ginkoia';
     public $genre_name = 'genre_ginkoia';
     public $taille_name = 'taille_ginkoia';
-    public $stock_name = 'stock_ginkoia';
     public $pack_stock_name = 'pack_stk_ginkoia';
     public $prix_stock = 'prix_stk_ginkoia';
-    public $oc_name = 'oc_ginkoia';
     public $ean13_name = 'ean13_ginkoia';
     public $couleur_name = 'couleur_ginkoia';
+    
+    public $stock_name = 'stock_ginkoia';
+    
+    public $catalog_price_name = 'catalogue_price_ginkoia';
+    public $prix_price_name = 'prix_price_ginkoia';
+    public $oc_name = 'oc_ginkoia';
 
     public $artWeb = '*ARTWEB_4.TXT';
     public $nomenclature = '*NOMENCLATURE_2.TXT';
@@ -139,6 +141,7 @@ class ecProduct
         $diffusion = $connector->getDiffusion();
         
         $this->config = [
+            'diffusion_auto' => json_decode(Outils::getConfigByName($diffusion, 'diffusion_automatique_ginkoia'), true),
             'ftp_hote' => $diffusion->getFtp_hote(),
             'ftp_port' => $diffusion->getFtp_port(),
             'ftp_login' => $diffusion->getFtp_login(),
@@ -151,6 +154,7 @@ class ecProduct
             'use_artnomenk' => Outils::getConfigByName($diffusion, 'ecGinkoiaUseArtNomenk'),
             'use_cbfourn' => Outils::getConfigByName($diffusion, 'ecGinkoiaUseCbFourn'),
             'use_couleur_stat' => Outils::getConfigByName($diffusion, 'ecGinkoiaUseCouleurStat'),
+            'use_oc' => Outils::getConfigByName($diffusion, 'ecGinkoiaUseOC'),
             'which_product_reference' => Outils::getConfigByName($diffusion, 'ecGinkoiaProductReference'),
             'which_combination_reference' => Outils::getConfigByName($diffusion, 'ecGinkoiaCombinationReference'),
         ];
@@ -473,15 +477,235 @@ class ecProduct
                 'erpName' => $this->couleur_stat,
                 'use' => $this->config['use_couleur_stat'],
             ],
+            // [
+            //     'name' => $this->stock_name,
+            //     'erpName' => $this->stock,
+            //     'use' => true,
+            // ],
+            // [
+            //     'name' => $this->oc_name,
+            //     'erpName' => $this->oc,
+            //     'use' => true,
+            // ],
+        ];
+
+        $fileName = $lst[$nbCron]['name'];
+        $fileInfos = $lst[$nbCron]['erpName'];
+        $timer_key = __FUNCTION__ . '_' . $fileName;
+        $this->timer->start($timer_key);
+        
+        if (!isset($lst[$nbCron])) {
+            $this->timer->stop($timer_key);
+            return false;
+        }
+
+        if (!$lst[$nbCron]['use']) {
+            if (isset($lst[($nbCron + 1)])) {
+                $this->timer->stop($timer_key);
+                return ($nbCron + 1);
+            }
+
+            $this->timer->stop($timer_key);
+            return true;
+        }
+
+        $listGinkoFile = glob($dirDepot.$fileInfos);
+        if (false !== strpos($fileInfos, 'STOCK_*')) {
+            @unlink($dir.$fileName.'.tmp');
+        }
+
+        // Récupération du fichier INIT
+        $initFileTime = 0;
+        foreach ($listGinkoFile as $ginkoFile) {
+            if (false === strpos($ginkoFile, 'INIT')) { // Not INIT
+                continue;
+            }
+            if (0 != $initFileTime) { // Cumul INIT
+                file_put_contents($dir.$fileName.'.tmp', file_get_contents($ginkoFile), FILE_APPEND);
+            }
+            if (0 == $initFileTime) {
+                $initFileTime = filemtime($ginkoFile);
+                if (!file_exists($dir.$fileName.'.tmp') || (filemtime($dir.$fileName.'.tmp') < $initFileTime)) { // Nouvelle INIT
+                    copy($ginkoFile, $dir.$fileName.'.tmp');
+                }
+            }
+        }
+        
+        // Ajout des fichiers différentiel
+        foreach ($listGinkoFile as $ginkoFile) {
+            if ($initFileTime < filemtime($ginkoFile)) { // Nouveau Delta
+                file_put_contents($dir.$fileName.'.tmp', file_get_contents($ginkoFile), FILE_APPEND);
+            }
+        }
+
+        if (!$initFileTime && (false === strpos($fileInfos, 'STOCK_*'))) {
+            $this->timer->stop($timer_key);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 1);
+            return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !';
+            return false;
+        }
+        if(!is_dir($dir.'archive')) {
+            mkdir($dir.'archive');
+        }
+        copy($dir.$fileName.'.tmp', $dir.'archive/'.$fileName.date('Y-m-d-H-i-s').'.csv');
+        
+        // Transformation
+        $this->timer->start('buildFromArray_'.$fileName);
+        $ret = DbFile::buildFromCsv($dir.$fileName.'.tmp', 1, ';', '"', '\\', "\n", 'ISO-8859-1');
+        $this->timer->stop('buildFromArray_'.$fileName);
+        if (!is_numeric($ret)) {
+            $this->timer->stop($timer_key);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 1);
+            return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true);
+            return false;
+        }
+
+        if (isset($lst[($nbCron + 1)])) {
+            $this->timer->stop($timer_key);
+            return ($nbCron + 1);
+        }
+
+        $listCleanArchive = glob($dir.'archive/*.csv');
+        $dateToClean = time() - (7 * 24 * 60 * 60); // 7 jours; 24 heures; 60 minutes; 60 secondes
+        foreach ($listCleanArchive as $cleanFile) {
+            if ($dateToClean > filemtime($cleanFile)) {
+                unlink($cleanFile);
+            }
+        }
+
+        $this->timer->stop($timer_key);
+        return true;
+    }
+    
+    public function cronGetFileStock(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        
+        $dir = dirname(__FILE__).'/../files/';
+        $dirDepot = dirname(__FILE__).'/../files/import/';
+
+        $lst = [
             [
                 'name' => $this->stock_name,
                 'erpName' => $this->stock,
                 'use' => true,
             ],
+        ];
+
+        $timer_key = __FUNCTION__ . '_' . $nbCron;
+        $this->timer->start($timer_key);
+        
+        if (!isset($lst[$nbCron])) {
+            $this->timer->stop($timer_key);
+            return false;
+        }
+        $fileName = $lst[$nbCron]['name'];
+        $fileInfos = $lst[$nbCron]['erpName'];
+
+        if (!$lst[$nbCron]['use']) {
+            if (isset($lst[($nbCron + 1)])) {
+                $this->timer->stop($timer_key);
+                return ($nbCron + 1);
+            }
+
+            $this->timer->stop($timer_key);
+            return true;
+        }
+
+        $listGinkoFile = glob($dirDepot.$fileInfos);
+        if (false !== strpos($fileInfos, 'STOCK_*')) {
+            @unlink($dir.$fileName.'.tmp');
+        }
+
+        // Récupération du fichier INIT
+        $initFileTime = 0;
+        foreach ($listGinkoFile as $ginkoFile) {
+            if (false === strpos($ginkoFile, 'INIT')) { // Not INIT
+                continue;
+            }
+            if (0 != $initFileTime) { // Cumul INIT
+                file_put_contents($dir.$fileName.'.tmp', file_get_contents($ginkoFile), FILE_APPEND);
+            }
+            if (0 == $initFileTime) {
+                $initFileTime = filemtime($ginkoFile);
+                if (!file_exists($dir.$fileName.'.tmp') || (filemtime($dir.$fileName.'.tmp') < $initFileTime)) { // Nouvelle INIT
+                    copy($ginkoFile, $dir.$fileName.'.tmp');
+                }
+            }
+        }
+        
+        // Ajout des fichiers différentiel
+        foreach ($listGinkoFile as $ginkoFile) {
+            if ($initFileTime < filemtime($ginkoFile)) { // Nouveau Delta
+                file_put_contents($dir.$fileName.'.tmp', file_get_contents($ginkoFile), FILE_APPEND);
+            }
+        }
+
+        if (!$initFileTime && (false === strpos($fileInfos, 'STOCK_*'))) {
+            $this->timer->stop($timer_key);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 1);
+            return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !';
+            return false;
+        }
+        if(!is_dir($dir.'archive')) {
+            mkdir($dir.'archive');
+        }
+        copy($dir.$fileName.'.tmp', $dir.'archive/'.$fileName.date('Y-m-d-H-i-s').'.csv');
+        
+        // Transformation
+        $this->timer->start('buildFromArray_'.$fileName);
+        $ret = DbFile::buildFromCsv($dir.$fileName.'.tmp', 1, ';', '"', '\\', "\n", 'ISO-8859-1');
+        $this->timer->stop('buildFromArray_'.$fileName);
+        if (!is_numeric($ret)) {
+            $this->timer->stop($timer_key);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 1);
+            return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true);
+            return false;
+        }
+
+        if (isset($lst[($nbCron + 1)])) {
+            $this->timer->stop($timer_key);
+            return ($nbCron + 1);
+        }
+
+        $listCleanArchive = glob($dir.'archive/*.csv');
+        $dateToClean = time() - (7 * 24 * 60 * 60); // 7 jours; 24 heures; 60 minutes; 60 secondes
+        foreach ($listCleanArchive as $cleanFile) {
+            if ($dateToClean > filemtime($cleanFile)) {
+                unlink($cleanFile);
+            }
+        }
+
+        $this->timer->stop($timer_key);
+        return true;
+    }
+
+    public function cronGetFilePrice(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        
+        $dir = dirname(__FILE__).'/../files/';
+        $dirDepot = dirname(__FILE__).'/../files/import/';
+
+        $lst = [
+            [
+                'name' => $this->catalog_price_name,
+                'erpName' => $this->artWeb,
+                'use' => true,
+            ],
+            [
+                'name' => $this->prix_price_name,
+                'erpName' => $this->prix,
+                'use' => true,
+            ],
             [
                 'name' => $this->oc_name,
                 'erpName' => $this->oc,
-                'use' => true,
+                'use' => $this->config['use_oc'],
             ],
         ];
 
@@ -576,7 +800,8 @@ class ecProduct
     public function cronFillCatalog(array $params)
     {
         $cron = $params['nbParent'] ?? 'manualTest';
-        $nbCron = $params['nbCron'] ?? 0;
+        $nbCron = $params['nbCron'] ?? 1;
+        // $nbCron = 420;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -611,6 +836,27 @@ class ecProduct
             }
             $json->deleteIndex();
             $this->timer->stop('DbFile_deleteIndex');
+
+            // Force buildIndex
+            $this->timer->start('DbFile_buildIndex');
+            $json->buildIndex(['i', 'CODE_MODELE', 'CODE_ARTICLE', 'TGF_ID']);
+            $tab_json[$this->prix_name]->buildIndex('CODE_ARTICLE');
+            $tab_json[$this->taille_name]->buildIndex('TGF_ID');
+            $tab_json[$this->genre_name]->buildIndex('GRE_ID');
+            
+            if ($this->config['use_couleur_stat']) {
+                $tab_json[$this->couleur_name]->buildIndex('GCS_ID');
+            }
+            if ($this->config['use_cbfourn']) {
+                $tab_json[$this->ean13_name]->buildIndex('CODE_ARTICLE');
+            }
+            if ($this->config['use_artnomenk']) {
+                $tab_json[$this->article_categorie_name]->buildIndex('CODE_MODEL');
+            }
+            if ($this->config['use_nomenk']) {
+                $tab_json[$this->categorie_name]->buildIndex('ID_GINKO');
+            }
+            $this->timer->stop('DbFile_buildIndex');
         }
 
         $json->go($nbCron);
@@ -645,12 +891,16 @@ class ecProduct
                     'rate' => $rate,
                     'catCompta' => '',
                 ];
+           
                 if ($idPim = Outils::getObjectByCrossId($tab_tax['crossid'], 'tax', $diffusion)) {
                     $tab_product['id_tax'] = $idPim;
                 } else {
                     $tax = json_decode(json_encode($tab_tax));
                     $this->timer->start('putCreateTax');
+                    $time = microtime(true);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateTax', 3);
                     $tab_product['id_tax'] = Outils::putCreateTax($tax, $diffusion, 1);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateTax : Time = '.(microtime(true) - $time), 3);
                     $this->timer->stop('putCreateTax');
                 }
             }
@@ -660,9 +910,9 @@ class ecProduct
              */
             $decliList = [];
             $this->timer->start('DbFile_select_decli');
-            $listDecl = $json->select('*', [['CODE_MODELE', $tab_product['crossid']]]);
+            $listDecl = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_catalogue_ginkoia` WHERE CODE_MODELE = "'.$tab_product['crossid'].'"'), true);
             $this->timer->stop('DbFile_select_decli');
-            
+
             if ($json->currentLine != $listDecl[0]['i']) {
                 continue;
             }
@@ -678,7 +928,7 @@ class ecProduct
 
                 // Prices
                 $this->timer->start('DbFile_select_prix');
-                $linePrice = $tab_json[$this->prix_name]->select('*', [['CODE_ARTICLE', $tab_product_combi['crossid']]]);
+                $linePrice = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_prix_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product_combi['crossid'].'"'), true);
                 $this->timer->stop('DbFile_select_prix');
                 $tab_product_combi['price'] = $tab_product_combi['pmvc'] = 0;
                 if (isset($linePrice[0][$this->tab_attr['price']])) {
@@ -723,7 +973,10 @@ class ecProduct
                         ];
                         $attr = json_decode(json_encode($tab_attr));
                         $this->timer->start('putCreateAttribute');
+                        $time = microtime(true);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateAttribute', 3);
                         $idPimAttr = Outils::putCreateAttribute($attr, $diffusion, 1);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateAttribute : Time = '.(microtime(true) - $time), 3);
                         $this->timer->stop('putCreateAttribute');
                     }
                         
@@ -740,7 +993,10 @@ class ecProduct
                         ];
                         $attr_value = json_decode(json_encode($tab_attr_value));
                         $this->timer->start('putCreateAttributeValue');
+                        $time = microtime(true);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateAttributeValue', 3);
                         $idPimAttrValue = Outils::putCreateAttributeValue($attr_value, $diffusion, $idPimAttr, '');
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateAttributeValue : Time = '.(microtime(true) - $time), 3);
                         $this->timer->stop('putCreateAttributeValue');
                     }
 
@@ -751,11 +1007,12 @@ class ecProduct
                 $ean13 = $tab_product_combi['ean13'] ?? '';
                 if (empty($ean13) && isset($tab_json[$this->ean13_name])) {
                     $this->timer->start('DbFile_select_ean13');
-                    $lineEAN = $tab_json[$this->ean13_name]->select('*', [['CODE_ARTICLE', $tab_product_combi['crossid']]]);
+                    $lineEAN = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_ean13_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product['crossid'].'"'), true);
                     $this->timer->stop('DbFile_select_ean13');
-                    $tab_product_combi['price'] = $lineEAN[0]['CB_FOURN'];
+                    $tab_product_combi['ean13'] = $lineEAN[0]['CB_FOURN'] ?? '0000000000000';
                 }
                 $tab_product_combi['ean13'] = ($ean13 && (preg_match('/^[0-9]{0,13}$/', $ean13))) ? $ean13 : '0000000000000';
+                $tab_product['ean13'] = '0000000000000';
 
                 // UPC
                 $tab_product_combi['upc'] = $tab_product_combi['upc'] ?? '';
@@ -772,7 +1029,10 @@ class ecProduct
                 if (!$idPimDecli) {
                     $decli = json_decode(json_encode($tab_product_combi));
                     $this->timer->start('putCreateDeclinaison');
+                    $time = microtime(true);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateDeclinaison', 3);
                     $idPimDecli = Outils::putCreateDeclinaison($decli, $diffusion, [], $tabAssoc, []);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateDeclinaison : Time = '.(microtime(true) - $time), 3);
                     $this->timer->stop('putCreateDeclinaison');
                 }
 
@@ -800,7 +1060,10 @@ class ecProduct
                     ];
                     $marque = json_decode(json_encode($tab_marque));
                     $this->timer->start('putCreateMarque');
+                    $time = microtime(true);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateMarque', 3);
                     $marqueList = Outils::putCreateMarque($marque, $diffusion, 1);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateMarque : Time = '.(microtime(true) - $time), 3);
                     $this->timer->stop('putCreateMarque');
                 }
             }
@@ -810,46 +1073,42 @@ class ecProduct
                 $lst_multi_categ = [];
                 if (isset($tab_json[$this->article_categorie_name])) {
                     $this->timer->start('Dbfile_select_artnomenk');
-                    $lst_multi_categ = array_column(($tab_json[$this->article_categorie_name]->select('CODE_NK', [['CODE_MODEL', $tab_product['id']]]) ?: []), 'CODE_NK');
+                    $linesCateg = DbFile::arJsonDecodeRecur(Outils::query('SELECT CODE_NK FROM `eci_midle_file_article_categorie_ginkoia` WHERE CODE_MODEL = "'.$tab_product['id'].'"'), true);
+                    $lst_multi_categ = array_column(($linesCateg ?: []), 'CODE_NK');
                     $this->timer->stop('Dbfile_select_artnomenk');
                 }
                 $lst_unique_multi_categ = array_filter(array_merge([$tab_product['id_category_default'] ?? ''], $lst_multi_categ));
 
                 $i = 0;
                 $tab_categ = [];
+                $tab_categ[][0] = ['name'=> 'default', 'crossid' => 'default'];
                 foreach ($lst_unique_multi_categ as $search_categ) {
                     $categ = [];
                     while (0 != $search_categ && isset($tab_json[$this->categorie_name])) {
                         $this->timer->start('Dbfile_select_nomenk');
-                        $item_categ = $tab_json[$this->categorie_name]->select('*', [['ID_GINKO', $search_categ]]);
+                        $item_categ = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_categorie_ginkoia` WHERE ID_GINKO = "'.$search_categ.'"'), true);
                         $this->timer->stop('Dbfile_select_nomenk');
                         if (empty($item_categ)) {
                             break;
                         }
-                        $categ[] = $item_categ[0]['LIB'];
+                        $categ[] = ['name' => $item_categ[0]['LIB'], 'crossid' => $item_categ[0]['ID_GINKO']];
                         $search_categ = $item_categ[0]['ID_PARENT'];
                     }
-                    $categr = array_map('trim', array_reverse($categ));
-                    if (!$categr) {
-                        $categr = ['default'];
-                    }
-                    foreach ($categr as $depth => $cn) {
+                    foreach ($categ as $depth => $cn) {
                         $tab_categ[$i][$depth] = $cn;
                     }
                     $i++;
                 }
-                if (!$tab_categ) {
-                    $tab_categ[][0] = 'default';
-                }
+                $tab_categ = array_map('array_reverse', $tab_categ);
                 
                 $categList = [];
                 foreach ($tab_categ as $branche => $infoCateg) {
                     $parent = '';
-                    foreach ($infoCateg as $depth => $nameCateg) {
+                    foreach ($infoCateg as $depth => $dataCateg) {
                         $categ = [
-                            'crossid' => $nameCateg, //*
-                            'id' => $nameCateg, //*
-                            'name' => $nameCateg, //*
+                            'crossid' => $dataCateg['crossid'], //*
+                            'id' => $dataCateg['crossid'], //*
+                            'name' => $dataCateg['name'], //*
                             // 'active' => '',
                             // 'description' => '',
                             // 'meta_keywords' => '',
@@ -870,13 +1129,21 @@ class ecProduct
                         } else {
                             $categ = json_decode(json_encode($categ));
                             $this->timer->start('putCreateCategory');
-                            $categList[] = Outils::putCreateCategory($categ, $diffusion, $parent, '');
+                            $time = microtime(true);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCategory', 3);
+                            $objF = Outils::putCreateCategory($categ, $diffusion, $parent, '');
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCategory : Time = '.(microtime(true) - $time), 3);
+                            $categList[] = $objF;
+                            $idPim = $objF->getId();
                             $this->timer->stop('putCreateCategory');
                         }
                         $parent = $idPim;
                     }
                 }
+                $tab_product['id_category_default'] = $dataCateg['crossid'];
             }
+
+            // return $tab_product['id_category_default'];
             
             // Caractéristiques
             if (true) {
@@ -895,6 +1162,7 @@ class ecProduct
                     if (isset($tab_json[$this->genre_name])) {
                         $this->timer->start('Dbfile_select_genre');
                         $lineGenre = $tab_json[$this->genre_name]->select('GRE_NOM', [['GRE_ID', $tab_product['genre']]]);
+                        $lineGenre = DbFile::arJsonDecodeRecur(Outils::query('SELECT GRE_NOM FROM `eci_midle_file_genre_ginkoia` WHERE GRE_ID = "'.$tab_product['genre'].'"'), true);
                         $this->timer->stop('Dbfile_select_genre');
                         $feat['Genre'] = trim($lineGenre[0]['GRE_NOM'] ?? '');
                     }
@@ -920,7 +1188,10 @@ class ecProduct
                         ];
                         $carac = json_decode(json_encode($tab_carac));
                         $this->timer->start('putCreateCarac');
+                        $time = microtime(true);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCarac', 3);
                         $idPimCarac = Outils::putCreateCarac($carac, $diffusion, 1);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCarac : Time = '.(microtime(true) - $time), 3);
                         $this->timer->stop('putCreateCarac');
                     }
                         
@@ -938,7 +1209,10 @@ class ecProduct
                         ];
                         $carac_value = json_decode(json_encode($tab_carac_value));
                         $this->timer->start('putCreateCaracValue');
+                        $time = microtime(true);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCaracValue', 3);
                         $idPimCaracValue = Outils::putCreateCaracValue($carac_value, $diffusion, $idPimCarac, '');
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCaracValue : Time = '.(microtime(true) - $time), 3);
                         $this->timer->stop('putCreateCaracValue');
                     }
 
@@ -962,6 +1236,7 @@ class ecProduct
             // Description
             $tab_product['description'] = ($tab_product['description'].' '.$tab_product['composition']);
 
+            // return $tab_product;
 
             $prod = json_decode(json_encode($tab_product));
 
@@ -971,8 +1246,19 @@ class ecProduct
             $this->timer->stop('getExist_product');
             if (!$idPimProduct) {
                 $this->timer->start('putCreateProduct');
+                $categList = array_unique($categList);
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateProduct', 3);
                 $idPimProduct = Outils::putCreateProduct($prod, $diffusion, $categList, $caracList, $marqueList, $imageList, $decliList, $langPS, 1);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateProduct : Time = '.(microtime(true) - $time), 3);
                 $this->timer->stop('putCreateProduct');
+            } else {
+                $this->timer->start('putUpdateDeclinaison_'.$idPimProduct);
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putUpdateDeclinaison_'.$idPimProduct, 3);
+                Outils::putUpdateDeclinaison($idPimProduct, $decliList, $diffusion);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putUpdateDeclinaison_'.$idPimProduct.' : Time = '.(microtime(true) - $time), 3);
+                $this->timer->stop('putUpdateDeclinaison_'.$idPimProduct);
             }
         }
 
@@ -1003,9 +1289,6 @@ class ecProduct
         $json = new DbFile($this->stock_name);
 
         $tab_json = [];
-        $tab_json[$this->prix_name] = new DbFile($this->prix_name);
-        $tab_json[$this->catalog_name] = new DbFile($this->catalog_name);
-        $tab_json[$this->oc_name] = new DbFile($this->oc_name);
         
         // reset des indexes des json, sinon on risque de travailler avec des indexes obsolètes
         if (!$nbCron) {
@@ -1032,16 +1315,26 @@ class ecProduct
             }
 
             // Récupération des IDs de produit / déclinaisons
+            $this->timer->start('getObjectByCrossId_declinaison');
             $idPimDecli = Outils::getObjectByCrossId($tab_product['crossid'], 'declinaison', $diffusion);
+            $this->timer->stop('getObjectByCrossId_declinaison');
             if (!$idPimDecli) { // Produit Simple
                 continue;
             } else { // Produit décliné
+                $this->timer->start('getById_produit');
                 $idPimProduct = DataObject::getById($idPimDecli)->getParentId();
+                $this->timer->stop('getById_produit');
             }
 
+            if (71041 != $idPimProduct) {
+                // continue;
+            }
+            // $this->collect->addInfo($idPimProduct.'-'.$idPimDecli);
 
             // Récupération de l'ID d'entrepôt
+            $this->timer->start('getObjectByCrossId_entrepot');
             $idPimEntrepot =  Outils::getObjectByCrossId($tab_product['location'], 'entrepot', $diffusion);
+            $this->timer->stop('getObjectByCrossId_entrepot');
             if (!$idPimEntrepot) {
                 $tab_entrepot = [
                     'id' => $tab_product['location'],
@@ -1050,59 +1343,13 @@ class ecProduct
                     // 'physique' => 1,
                 ];
                 $entrepot = json_decode(json_encode($tab_entrepot));
+                $this->timer->start('putCreateDepot');
                 $idPimEntrepot = Outils::putCreateDepot($entrepot, $diffusion, 1, '');
-            
+                $this->timer->stop('putCreateDepot');
             }
 
             // Conversion date
-            $date_U = Carbon::parse($tab_product['lastUpdate'] ?? date('Y-m-d H:i:s'))->format('U');
-
-            /**
-             * MAJ des prix
-             */
-            $linePrice = $tab_json[$this->prix_name]->select('*', [['CODE_ARTICLE', $tab_product['crossid']]]);
-            if (isset($linePrice[0][$this->tab_attr['price']])) {
-                $lineRate = $tab_json[$this->catalog_name]->select('*', [['CODE_ARTICLE', $tab_product['crossid']]]);
-                $rate = $lineRate[0][$this->tab_cat['id_tax']] ?? $this->tva;
-
-                $tab_product['price'] = $linePrice[0][$this->tab_attr['price']];
-                $tab_product['pmvc'] = $linePrice[0][$this->tab_attr['pmvc']];
-                // $tab_prices = $this->calculatePrices($tab_product['price'], $tab_product['pmvc'], $rate);
-                // $tab_product['price'] = $tab_prices['price'];
-                // $tab_product['pmvc'] = $tab_prices['pmvc'];
-
-                try {
-                    Outils::putCreatePriceSell($idPimProduct, $idPimDecli, $diffusion->getId(), 1, 1, 1, (float) $tab_product['pmvc']);
-
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
-                } catch (Exception $e) {
-                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
-                }
-
-                /**
-                 * MAJ des OC
-                 */
-                if (isset($tab_json[$this->oc_name])) {
-                    $linesOC = $tab_json[$this->oc_name]->select('*', [['CODE_ARTICLE', $tab_product['crossid']]]);
-                    foreach ($linesOC as $lineOC) {
-                        if ('01/01/1950' == $lineOC['DATE_DEBUT']) {
-                            $lineOC['DATE_DEBUT'] = '01/01/2020';
-                        }
-                        $begin = Carbon::parse(implode('-', array_reverse(explode('/', $lineOC['DATE_DEBUT']))).' 00:00:00')->format('Y-m-d\\TH:i');
-                        $end = Carbon::parse(implode('-', array_reverse(explode('/', $lineOC['DATE_FIN']))).' 23:59:59')->format('Y-m-d\\TH:i');
-
-                        try {
-                            Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) $lineOC['PRIX_ARTICLE'], date_start: $begin, date_end: $end);
-                    
-                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
-                        } catch (Exception $e) {
-                            return $e->getTrace();
-                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
-                        }
-                    }
-                }
-            }
-            
+            $date_U = Carbon::parse($tab_product['lastUpdate'] ?? date('Y-m-d H:i:s'))->format('U');            
 
             /**
              * MAJ des stocks
@@ -1117,6 +1364,9 @@ class ecProduct
             // }
 
             try {
+                $this->timer->start('addMouvementStock');
+                $time = microtime(true);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.$idPimProduct.'-'.$idPimDecli, 3);
                 $id_mvt = Outils::addMouvementStock(
                     $idPimProduct,
                     $idPimDecli,
@@ -1132,6 +1382,8 @@ class ecProduct
                     $prix, // Prix
                     $date_U
                 );
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                $this->timer->stop('addMouvementStock');
                 // $tab_log[] = [
                 //     $idPimProduct,
                 //     $idPimDecli,
@@ -1141,6 +1393,132 @@ class ecProduct
                 // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : mouvement -> ' . $id_mvt . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
             } catch (Exception $e) {
                 Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+            }
+        }
+
+        return true;
+    }
+    
+    public function cronUpdatePrice(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        // $nbCron = 3372;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+
+        $json = new DbFile($this->catalog_price_name);
+
+        $tab_json = [];
+        $tab_json[$this->prix_price_name] = new DbFile($this->prix_price_name);
+        if ($this->config['use_oc']) {
+            $tab_json[$this->oc_name] = new DbFile($this->oc_name);
+        }
+        
+        // reset des indexes des json, sinon on risque de travailler avec des indexes obsolètes
+        if (!$nbCron) {
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+
+            $tab_json[$this->prix_price_name]->buildIndex('CODE_ARTICLE');
+            if ($this->config['use_oc']) {
+                $tab_json[$this->oc_name]->buildIndex('CODE_ARTICLE');
+            }
+        }
+
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+
+            $tab_product = [];
+            foreach ($this->tab_cat as $field => $tag) {
+                if ($tag && array_key_exists($tag, $item)) {
+                    $tab_product[$field] = trim($item[$tag]);
+                }
+            }
+            if ('2001002779831' != $item['CODE_ARTICLE']) {
+                // continue;
+            }
+
+            // Récupération des IDs de produit / déclinaisons
+            $this->timer->start('getObjectByCrossId_declinaison');
+            $idPimDecli = Outils::getObjectByCrossId($tab_product['decl_reference'], 'declinaison', $diffusion);
+            $this->timer->stop('getObjectByCrossId_declinaison');
+            if (!$idPimDecli) { // Produit Simple
+                continue;
+            } else { // Produit décliné
+                $this->timer->start('getById_produit');
+                $idPimProduct = DataObject::getById($idPimDecli)->getParentId();
+                $this->timer->stop('getById_produit');
+            }
+
+            if (71041 != $idPimProduct) {
+                // continue;
+            }
+            // $this->collect->addInfo($idPimProduct.'-'.$idPimDecli);
+
+            
+            $rate = is_numeric($tab_product['id_tax'] ?? '') ? $tab_product['id_tax'] : $this->tva;
+
+            /**
+             * MAJ des prix
+             */
+            $this->timer->start('DbFile_select_prix');
+	        $linePrice = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_prix_price_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product['decl_reference'].'"'), true);
+            $this->timer->stop('DbFile_select_prix');
+            if (isset($linePrice[0][$this->tab_attr['price']])) {
+                $tab_product['price'] = $linePrice[0][$this->tab_attr['price']];
+                $tab_product['pmvc'] = $linePrice[0][$this->tab_attr['pmvc']];
+                // $tab_prices = $this->calculatePrices($tab_product['price'], $tab_product['pmvc'], $rate);
+                // $tab_product['price'] = $tab_prices['price'];
+                // $tab_product['pmvc'] = $tab_prices['pmvc'];
+
+                try {
+                    $this->timer->start('putCreatePriceSell');
+                    $time = microtime(true);
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli, 3);
+                    Outils::putCreatePriceSell($idPimProduct, $idPimDecli, $diffusion->getId(), 1, 1, 1, (float) $tab_product['pmvc']);
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                    $this->timer->stop('putCreatePriceSell');
+
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
+                } catch (Exception $e) {
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+                }
+
+                /**
+                 * MAJ des OC
+                 */
+                if (isset($tab_json[$this->oc_name])) {
+                    $this->timer->start('DbFile_select_OC');
+                    $linesOC = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_oc_price_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product['decl_reference'].'"'), true);
+                    $this->timer->stop('DbFile_select_OC');
+                    foreach ($linesOC as $lineOC) {
+                        if ('01/01/1950' == $lineOC['DATE_DEBUT']) {
+                            $lineOC['DATE_DEBUT'] = '01/01/2020';
+                        }
+                        $begin = Carbon::parse(implode('-', array_reverse(explode('/', $lineOC['DATE_DEBUT']))).' 00:00:00')->format('Y-m-d\\TH:i');
+                        $end = Carbon::parse(implode('-', array_reverse(explode('/', $lineOC['DATE_FIN']))).' 23:59:59')->format('Y-m-d\\TH:i');
+
+                        try {
+                            $this->timer->start('putCreatePriceSell_OC');
+                            $time = microtime(true);
+                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 3);
+                            Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) $lineOC['PRIX_ARTICLE'], date_start: $begin, date_end: $end);
+                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                            $this->timer->start('putCreatePriceSell_OC');
+                    
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
+                        } catch (Exception $e) {
+                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+                        }
+                    }
+                }
             }
         }
 
@@ -1281,6 +1659,36 @@ class ecProduct
 
             return $ret;
         }
+        if ('getFileStock' == $action) {
+            $ret = true;
+            foreach (range(0, 15) as $i) {
+                $data['nbCron'] = $i;
+                $retour = $this->cronGetFileStock($data);
+                $this->collect->addInfo('Retour : '.json_encode($retour));
+                $ret &= (is_numeric($retour) ? true : ((bool) $retour));
+
+                if (is_bool($retour)) {
+                    break;
+                }
+            }
+
+            return $ret;
+        }
+        if ('getFilePrice' == $action) {
+            $ret = true;
+            foreach (range(0, 15) as $i) {
+                $data['nbCron'] = $i;
+                $retour = $this->cronGetFilePrice($data);
+                $this->collect->addInfo('Retour : '.json_encode($retour));
+                $ret &= (is_numeric($retour) ? true : ((bool) $retour));
+
+                if (is_bool($retour)) {
+                    break;
+                }
+            }
+
+            return $ret;
+        }
 
         if ('fillCatalog' == $action) {
             $retour = $this->cronFillCatalog(['nbCron' => 0]);
@@ -1289,6 +1697,10 @@ class ecProduct
         
         if ('updateStock' == $action) {
             $retour = $this->cronUpdateStock(['nbCron' => 0]);
+            return $retour;
+        }
+        if ('updatePrice' == $action) {
+            $retour = $this->cronUpdatePrice(['nbCron' => 0]);
             return $retour;
         }
         
