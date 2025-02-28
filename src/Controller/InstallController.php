@@ -177,6 +177,17 @@ class InstallController extends FrontendController
             $config->save();
         }
 
+        if (!Dataobject::getByPath('/Diffusion/ecGinkoia/forceSendOrder')) {
+            $config = new DataObject\Config();
+            $config->setParentID($diff->getId());
+            $config->setKey('forceSendOrder');
+            $config->setIdconfig('forceSendOrder');
+            $config->setPublished(false);
+            $config->setName('Force l\'envoi de tout les produits dans les commandes');
+            $config->setTypeConfig('checkbox');
+            $config->save();
+        }
+
         return true;
 
         // Choisir les champs de la class Product dont l'ERP est maitre
@@ -230,6 +241,7 @@ class InstallController extends FrontendController
      */
     public function initActions(connector $connector)
     {
+        // Création du hook : updateOrderHistory ecGinkoia
         if (!Dataobject::getByPath('/Action/updateOrderHistory ecGinkoia')) {
             $action = new DataObject\Action();
             $action->setParentID(WebsiteSetting::getByName('folderAction')->getData());
@@ -241,6 +253,44 @@ class InstallController extends FrontendController
             $action->save();
             $Hook = Dataobject::getByPath('/Hook/updateOrderHistory');
             $this->addActionid($Hook, $action);
+        }
+        
+        // Création du Tag PushToGinkoia qui sera appelé comme un Hook
+        if (!Dataobject::getByPath('/Tag/PushToGinkoia')) {
+            $tag = new DataObject\Tag();
+            $tag->setName('Pousser la commande vers Ginkoia');
+            $tag->setKey('PushToGinkoia');
+            $tag->setDescription('Pousser la commande vers Ginkoia');
+            $tag->setCode('PushToGinkoia');     
+            $tag->setCateg('order');
+            $tag->setPublished(true);
+            $tag->setParentID(WebsiteSetting::getByName('folderTag')->getData());
+            $tag->save();
+        }
+        if (!Dataobject::getByPath('/Action/PushToGinkoia')) {
+            $action = new DataObject\Action();
+            $action->setParentID(WebsiteSetting::getByName('folderAction')->getData());
+            $action->setKey('PushToGinkoia');
+            $action->setName('Pousser la commande vers Ginkoia');
+            $action->setAction(array('\bundles\ecGinkoiaBundle\Controller\WebhookController::hookTagPushToGinkoia'));
+            $action->setDescription('Pousser la commande vers Ginkoia');
+            $action->setPublished(true);
+            $action->save();
+            $tag = Dataobject::getByPath('/Tag/PushToGinkoia');
+            $this->addActionid($tag, $action);
+        }
+
+        // Création du Tag CheckToGinkoia sans appel de Hook 
+        if (!Dataobject::getByPath('/Tag/CheckToGinkoia')) {
+            $tag = new DataObject\Tag();
+            $tag->setName('Vérification de l\'intégration de la commande dans Ginkoia');
+            $tag->setKey('CheckToGinkoia');
+            $tag->setDescription('Vérification de l\'intégration de la commande dans Ginkoia');
+            $tag->setCode('CheckToGinkoia');     
+            $tag->setCateg('order');
+            $tag->setPublished(true);
+            $tag->setParentID(WebsiteSetting::getByName('folderTag')->getData());
+            $tag->save();
         }
 
         return true;
@@ -300,7 +350,7 @@ class InstallController extends FrontendController
             ->setListStages('SyncGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronSyncGinkoia'])
+            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronSyncGinkoia'])
             ->save($connector->getMySign(__LINE__));
 
         
@@ -317,9 +367,9 @@ class InstallController extends FrontendController
             ->setListStages('CatalogueGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFile','\bundles\ecGinkoiaBundle\src\ecProduct::cronFillCatalog'])
+            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFile','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronFillCatalog','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateFluctuMinus'])
             ->save($connector->getMySign(__LINE__));
-
+            
             
         // Crons de MAJ des stock Ginkoia
         if (!Dataobject::getByPath('/Cron/ecGinkoia_stock')) {
@@ -334,7 +384,7 @@ class InstallController extends FrontendController
             ->setListStages('StockGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFileStock','\bundles\ecGinkoiaBundle\src\ecProduct::cronUpdateStock',])
+            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFileStock','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateStock',])
             ->save($connector->getMySign(__LINE__));
 
             
@@ -351,7 +401,7 @@ class InstallController extends FrontendController
             ->setListStages('PriceGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\ecProduct::cronGetFilePrice','\bundles\ecGinkoiaBundle\src\ecProduct::cronUpdatePrice',])
+            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFilePrice','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdatePrice',])
             ->save($connector->getMySign(__LINE__));
 
         return true;

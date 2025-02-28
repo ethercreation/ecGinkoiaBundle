@@ -49,34 +49,84 @@ class WebhookController extends FrontendController
     }
 
     public function hookUpdateOrderHistory($params, $diffSpe = 0)
-    {        
+    {
         $objHook = $params['orderHistory'];
         $objHook->setHideUnpublished(false);
         $Obj = $objHook->getObjectHistory();
         $stat = $objHook->getOrder_state();
         $ts = time();
-        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START', 3);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 3);
         $configPaymentValide = json_decode(Dataobject::getByPath('/Config/paiement_valide')->getValeur(), true);
         if (!in_array($stat->getId(), $configPaymentValide)) {
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Mode paiement non valide', 3);
+            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Statut de la commande, non valide', 3);
             return true;
         }
 
         $diffusion = Dataobject::getByPath('/Diffusion/ecGinkoia');
+        $forceSendOrder = Outils::getConfigByName($diffusion, 'forceSendOrder');
  
         if ($Obj->getClassName() == 'order') {
-            foreach ($Obj->getCrossid() as $crossid) {
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid, 3);
-                if ($diffusion->getId() != $crossid->getElementId()) {
-                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' non traité par la diffusion '.$diffusion->getId(), 3);
-                    continue;
-                }
+            $found = false;
+            foreach ($Obj->getOrderdetail() as $detail) { // Vérification si un produit est de Ginkoia
                 
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' lancement de la createOrder p la diffusion '.$diffusion->getId(), 3);
-                $this->createOrder($Obj);
+                $idPimDecli = Outils::getObjectByCrossId($detail->getReference(), 'declinaison', $diffusion);
+                if (!$idPimDecli) { // Produit Simple
+                    continue;
+                } else { // Produit décliné
+                    $idPimProduct = DataObject::getById($idPimDecli)->getParentId();
+                    $product = DataObject::getById($idPimProduct);
+                }
+
+                $diffusionIds = $product->getDiffusions_active();
+                if (in_array($diffusion->getId(), $diffusionIds)) {
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 3);
+                    $found = true;
+                }
             }
+
+            if (true === $found || $forceSendOrder) { // Si un produit est trouvé Ginkoia est trouvé alors associer Tag
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Ajout du Tag "PushToGinkoia"', 3);
+                Outils::addTag($Obj, 'PushToGinkoia');
+                return true;
+            }
+
+            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Ne rien faire', 3);
+            // return true;
+            // foreach ($Obj->getCrossid() as $crossid) {
+            //     Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid, 3);
+            //     if ($diffusion->getId() != $crossid->getElementId()) {
+            //         Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' non traité par la diffusion '.$diffusion->getId(), 3);
+            //         continue;
+            //     }
+                
+            //     Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' lancement de la createOrder p la diffusion '.$diffusion->getId(), 3);
+            //     $this->createOrder($Obj);
+            // }
         }
        
+    }
+
+    public function hookTagPushToGinkoia($params, $diffSpe = 0)
+    {
+        $obj = $params['order'];
+        $ts = time();
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 3);
+
+        if ('order' == $obj->getClassName()) {
+            if (!Outils::hasTag($obj, 'PushToGinkoia')) {
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Ne posède pas le Tag "PushToGinkoia"', 3);
+                return true;
+            }
+
+            if ($this->createOrder($obj)) {
+                Outils::deleteTag($obj, 'PushToGinkoia');
+                Outils::addTag($obj, 'CheckToGinkoia');
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Transmise à Ginkoia et passe dans le Tag "CheckToGinkoia"', 3);
+            }
+        }
+
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' END', 3);
+        return true;
     }
 
     public function createOrder($order, $simulation = false)
@@ -84,6 +134,9 @@ class WebhookController extends FrontendController
         if (null === $order) {
             return false;
         }
+        
+        $diffusion = Dataobject::getByPath('/Diffusion/ecGinkoia');
+        $forceSendOrder = Outils::getConfigByName($diffusion, 'forceSendOrder');
 
         $customer = $order->getCustomer();
         $address_delivery = $order->getAddress_delivery();
@@ -99,9 +152,27 @@ class WebhookController extends FrontendController
         $portTTC = $order->getTotal_shipping_tax_incl();
         $portHT = $portTTC / 1.2;
 
+        $found = false;
         $totalHT = $mtTVA = 0;
         $order_ligne = $lstDataTVA = [];
         foreach ($order->getOrderdetail() as $detail) {
+            if (!$forceSendOrder) {
+                $idPimDecli = Outils::getObjectByCrossId($detail->getReference(), 'declinaison', $diffusion);
+                if (!$idPimDecli) { // Produit Simple
+                    continue;
+                } else { // Produit décliné
+                    $idPimProduct = DataObject::getById($idPimDecli)->getParentId();
+                    $product = DataObject::getById($idPimProduct);
+                }
+                
+                $diffusionIds = $product->getDiffusions_active();
+                if (!in_array($diffusion->getId(), $diffusionIds)) {
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 3);
+                    continue;
+                }
+            }
+            $found = true;
+
             $tva = sprintf("%.2f", $detail->getTax_rate());
 
             $unit_price_tax_incl = $detail->getUnit_tax_incl();
@@ -127,6 +198,10 @@ class WebhookController extends FrontendController
             ];
             $lstDataTVA[$tva]['totalHT'] = ($lstDataTVA[$tva]['totalHT'] ?? 0) + $total_price_tax_excl;
             $lstDataTVA[$tva]['totalTVA'] = ($lstDataTVA[$tva]['totalTVA'] ?? 0) + ($total_price_tax_incl - $total_price_tax_excl);
+        }
+
+        if (!$found) { // Aucun produit appartenant à la diffusion n'a été trouvé
+            return true;
         }
 
         

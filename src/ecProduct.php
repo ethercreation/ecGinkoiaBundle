@@ -3,6 +3,7 @@ namespace bundles\ecGinkoiaBundle\src;
 
 use Pimcore\Model\WebsiteSetting;
 use Pimcore\Model\DataObject\Data\ObjectMetadata;
+use Pimcore\Controller\FrontendController;
 use Pimcore\Model\DataObject;
 use Pimcore\Model\DataObject\Data\ElementMetadata;
 use bundles\ecGinkoiaBundle\src\ecTimer;
@@ -15,6 +16,7 @@ use Carbon\Carbon;
 use Exception;
 use phpseclib3\Net\SFTP;
 use Pimcore\Model\DataObject\Product;
+use bundles\ecMiddleBundle\Controller\ecMiddleController;
 
 class ecProduct extends FrontendController
 {
@@ -149,6 +151,7 @@ class ecProduct extends FrontendController
             'ftp_chemin' => rtrim($diffusion->getFtp_chemin(), '/').'/',
             'export_ftp' => $diffusion->getExport_ftp(),
             'ftp_sftp' => $diffusion->getFtp_sftp(),
+            'forceSendOrder' => Outils::getConfigByName($diffusion, 'forceSendOrder'),
 
             'use_nomenk' => Outils::getConfigByName($diffusion, 'ecGinkoiaUseNomenk'),
             'use_artnomenk' => Outils::getConfigByName($diffusion, 'ecGinkoiaUseArtNomenk'),
@@ -801,7 +804,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 1;
-        // $nbCron = 420;
+        // $nbCron = 166;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1014,6 +1017,12 @@ class ecProduct extends FrontendController
                 $tab_product_combi['ean13'] = ($ean13 && (preg_match('/^[0-9]{0,13}$/', $ean13))) ? $ean13 : '0000000000000';
                 $tab_product['ean13'] = '0000000000000';
 
+                if ('0000000000000' != $tab_product_combi['ean13']) {
+                    if (Outils::getExist($tab_product_combi['ean13'], '', 'ean13', 'declinaison')) {
+                        $tab_product_combi['ean13'] = '0000000000000'; // Si doublon d'EAN quelque pars mettre 000
+                    }
+                }
+
                 // UPC
                 $tab_product_combi['upc'] = $tab_product_combi['upc'] ?? '';
 
@@ -1045,7 +1054,7 @@ class ecProduct extends FrontendController
 
             // Marques *
             if (true) {
-                $manufacturerCrossid = $tab_product['manufacturer'] ?? '';
+                $manufacturerCrossid = $tab_product['manufacturer'] ?? 'NC';
                 if ($idPim = Outils::getObjectByCrossId($manufacturerCrossid, 'marque', $diffusion)) {
                     $marqueList = $idPim;
                 } else {
@@ -1128,6 +1137,8 @@ class ecProduct extends FrontendController
                             $categList[] = $objF;
                         } else {
                             $categ = json_decode(json_encode($categ));
+                            $this->timer->start('putCreateCategory_'.$tab_product['name']);
+                            $this->timer->stop('putCreateCategory_'.$tab_product['name']);
                             $this->timer->start('putCreateCategory');
                             $time = microtime(true);
                             // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCategory', 3);
@@ -1252,13 +1263,24 @@ class ecProduct extends FrontendController
                 $idPimProduct = Outils::putCreateProduct($prod, $diffusion, $categList, $caracList, $marqueList, $imageList, $decliList, $langPS, 1);
                 // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateProduct : Time = '.(microtime(true) - $time), 3);
                 $this->timer->stop('putCreateProduct');
+
+                // return $idPimProduct;
             } else {
-                $this->timer->start('putUpdateDeclinaison_'.$idPimProduct);
+                $this->timer->start('putUpdateDeclinaison');
                 $time = microtime(true);
                 // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putUpdateDeclinaison_'.$idPimProduct, 3);
                 Outils::putUpdateDeclinaison($idPimProduct, $decliList, $diffusion);
                 // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putUpdateDeclinaison_'.$idPimProduct.' : Time = '.(microtime(true) - $time), 3);
-                $this->timer->stop('putUpdateDeclinaison_'.$idPimProduct);
+                $this->timer->stop('putUpdateDeclinaison');
+
+                
+                $this->timer->start('productIsActive');
+                $this->productIsActive($idPimProduct, $diffusion);
+                $this->timer->stop('productIsActive');
+            }
+
+            if ('72998' == $idPimProduct) {
+                // return 'bloqué';
             }
         }
 
@@ -1282,6 +1304,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
+        $nbCron = 2970;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1326,7 +1349,7 @@ class ecProduct extends FrontendController
                 $this->timer->stop('getById_produit');
             }
 
-            if (71041 != $idPimProduct) {
+            if (71924 != $idPimProduct) {
                 // continue;
             }
             // $this->collect->addInfo($idPimProduct.'-'.$idPimDecli);
@@ -1366,7 +1389,7 @@ class ecProduct extends FrontendController
             try {
                 $this->timer->start('addMouvementStock');
                 $time = microtime(true);
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.$idPimProduct.'-'.$idPimDecli, 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.$idPimProduct.'-'.$idPimDecli, 3);
                 $id_mvt = Outils::addMouvementStock(
                     $idPimProduct,
                     $idPimDecli,
@@ -1382,7 +1405,7 @@ class ecProduct extends FrontendController
                     $prix, // Prix
                     $date_U
                 );
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
                 $this->timer->stop('addMouvementStock');
                 // $tab_log[] = [
                 //     $idPimProduct,
@@ -1403,7 +1426,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
-        // $nbCron = 3372;
+        // $nbCron = 59;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1457,10 +1480,10 @@ class ecProduct extends FrontendController
                 $this->timer->stop('getById_produit');
             }
 
-            if (71041 != $idPimProduct) {
+            if (74982 != $idPimProduct) {
                 // continue;
             }
-            // $this->collect->addInfo($idPimProduct.'-'.$idPimDecli);
+            // $this->collect->addInfo($idPimProduct.'-'.$idPimDecli.' => '.$tab_product['decl_reference']);
 
             
             $rate = is_numeric($tab_product['id_tax'] ?? '') ? $tab_product['id_tax'] : $this->tva;
@@ -1481,9 +1504,9 @@ class ecProduct extends FrontendController
                 try {
                     $this->timer->start('putCreatePriceSell');
                     $time = microtime(true);
-                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli, 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli, 3);
                     Outils::putCreatePriceSell($idPimProduct, $idPimDecli, $diffusion->getId(), 1, 1, 1, (float) $tab_product['pmvc']);
-                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
                     $this->timer->stop('putCreatePriceSell');
 
                     // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
@@ -1496,7 +1519,7 @@ class ecProduct extends FrontendController
                  */
                 if (isset($tab_json[$this->oc_name])) {
                     $this->timer->start('DbFile_select_OC');
-                    $linesOC = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_oc_price_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product['decl_reference'].'"'), true);
+                    $linesOC = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_oc_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product['decl_reference'].'"'), true);
                     $this->timer->stop('DbFile_select_OC');
                     foreach ($linesOC as $lineOC) {
                         if ('01/01/1950' == $lineOC['DATE_DEBUT']) {
@@ -1505,12 +1528,13 @@ class ecProduct extends FrontendController
                         $begin = Carbon::parse(implode('-', array_reverse(explode('/', $lineOC['DATE_DEBUT']))).' 00:00:00')->format('Y-m-d\\TH:i');
                         $end = Carbon::parse(implode('-', array_reverse(explode('/', $lineOC['DATE_FIN']))).' 23:59:59')->format('Y-m-d\\TH:i');
 
+                        $this->collect->addInfo('OC '.$tab_product['decl_reference'].' : '.json_encode([$begin,$end]));
                         try {
                             $this->timer->start('putCreatePriceSell_OC');
                             $time = microtime(true);
-                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 3);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 3);
                             Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) $lineOC['PRIX_ARTICLE'], date_start: $begin, date_end: $end);
-                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
                             $this->timer->start('putCreatePriceSell_OC');
                     
                             // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
@@ -1634,6 +1658,97 @@ class ecProduct extends FrontendController
 
         return true;
     }
+
+    public function cronUpdateFluctuMinus(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 1;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+
+        $lstGinkoia = array_column(Outils::query('SELECT DISTINCT(CODE_MODELE) FROM `eci_midle_file_catalogue_ginkoia`'), 'CODE_MODELE');
+        
+        $lists = ecMiddleController::getRequireOrDependBy($diffusion->getId(), 'object', false);
+        
+        foreach ($lists as $i => $item) {
+            if ((time() > $stopTime) && ($i > $nbCron)) {
+                return $i;
+            }
+            $obj = DataObject::getById($item['id']);
+            if ('product' != $obj->getClassName()) {
+                continue; // Ce n'est pas un produit
+            }
+
+            $crossid = '';
+            $lstCrossid = $obj->getCrossid();
+            foreach ($lstCrossid as $objCrossid) {
+                if ($objCrossid->getElementId() != $diffusion->getId()) {
+                    continue; // Nous ne sommes pas responsable de ces diffusions
+                }
+                $crossid = $objCrossid->getData()['ext_id'] ?? '';
+            }
+
+            if (empty($crossid)) {
+                continue; // Le crossid est vide
+            }
+            if (in_array($crossid, $lstGinkoia)) {
+                continue; // Le produit est toujours dans le flux
+            }
+
+            if (!Outils::hasTag($obj, 'deref')) {
+                Outils::addTag($obj, 'deref');
+            }
+
+            // Mettre les stock des déclinaisons à 0
+            try {
+                $this->timer->start('setNullStock');
+                $time = microtime(true);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 3);
+                Outils::resetStock($obj->getId());
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 3);
+                $this->timer->stop('setNullStock');
+
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ setNullStock ('.$obj->getId().') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+            }
+
+            if (1 == $obj->getPublished()) {
+                // Modification du produit
+                try {
+                    $obj->setPublished(false); // On désactive le produit
+                    $obj->save(['versionNote' => '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ')']);
+                } catch (Exception $e) {
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur Deref : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, $obj, 'error_save');
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public function productIsActive($idPimProduct, $diffusion)
+    {
+        $obj = DataObject::getById($idPimProduct);
+        if ('product' != $obj->getClassName()) {
+            return false; // Ce n'est pas un produit
+        }
+
+        if (Outils::hasTag($obj, 'deref')) {
+            Outils::deleteTag($obj, 'deref');
+            if (0 == $obj->getPublished()) { // Le produit est déjà actif
+                $obj->setPublished(true);
+
+                try {
+                    $obj->save(['versionNote' => 'OUTILS ' . __LINE__]);
+                } catch (Exception $e) {
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, $obj, 'error_save');
+                }
+            }
+        }
+
+        return true;
+    }
             
 
     public function devArthur($action, $data = [])
@@ -1642,6 +1757,8 @@ class ecProduct extends FrontendController
         $this->timer->start($timer_key);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
+
+        // return Outils::getExist('3663983362175', '', 'ean13', 'declinaison');
 
         //https://devpim.midpim.com/launchecGinkoia?class=ecProduct&name=devArthur&param[action]=getFile&param[data][nbCron]=55
         if ('getFile' == $action) {
@@ -1706,6 +1823,11 @@ class ecProduct extends FrontendController
         
         if ('syncGinkoia' == $action) {
             $retour = $this->cronSyncGinkoia([]);
+            return $retour;
+        }
+        
+        if ('fluctuMinus' == $action) {
+            $retour = $this->cronUpdateFluctuMinus([]);
             return $retour;
         }
 
