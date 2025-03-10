@@ -1304,7 +1304,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
-        $nbCron = 2970;
+        // $nbCron = 2970;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();

@@ -110,22 +110,22 @@ class WebhookController extends FrontendController
     {
         $obj = $params['order'];
         $ts = time();
-        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 3);
+        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 3);
 
         if ('order' == $obj->getClassName()) {
             if (!Outils::hasTag($obj, 'PushToGinkoia')) {
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Ne posède pas le Tag "PushToGinkoia"', 3);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Ne posède pas le Tag "PushToGinkoia"', 3);
                 return true;
             }
 
             if ($this->createOrder($obj)) {
                 Outils::deleteTag($obj, 'PushToGinkoia');
                 Outils::addTag($obj, 'CheckToGinkoia');
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Transmise à Ginkoia et passe dans le Tag "CheckToGinkoia"', 3);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Transmise à Ginkoia et passe dans le Tag "CheckToGinkoia"', 3);
             }
         }
 
-        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' END', 3);
+        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' END', 3);
         return true;
     }
 
