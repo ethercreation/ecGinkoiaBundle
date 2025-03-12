@@ -928,6 +928,9 @@ class ecProduct extends FrontendController
                         $tab_product_combi[$field] = $item_decl[$tag];
                     }
                 }
+                
+                // Reference
+                $tab_product_combi['reference'] = (string) $tab_product_combi['reference'];
 
                 // Prices
                 $this->timer->start('DbFile_select_prix');
