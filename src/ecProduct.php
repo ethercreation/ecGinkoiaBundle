@@ -1675,7 +1675,10 @@ class ecProduct extends FrontendController
         $lists = ecMiddleController::getRequireOrDependBy($diffusion->getId(), 'object', false);
         
         foreach ($lists as $i => $item) {
-            if ((time() > $stopTime) && ($i > $nbCron)) {
+            if ($i < $nbCron) {
+                continue;
+            }
+            if (time() > $stopTime) {
                 return $i;
             }
             $obj = DataObject::getById($item['id']);
