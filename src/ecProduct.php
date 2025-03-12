@@ -928,7 +928,7 @@ class ecProduct extends FrontendController
                         $tab_product_combi[$field] = $item_decl[$tag];
                     }
                 }
-                
+
                 // Reference
                 $tab_product_combi['reference'] = (string) $tab_product_combi['reference'];
 
@@ -1707,9 +1707,9 @@ class ecProduct extends FrontendController
             try {
                 $this->timer->start('setNullStock');
                 $time = microtime(true);
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 3);
                 Outils::resetStock($obj->getId());
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 3);
                 $this->timer->stop('setNullStock');
 
             } catch (Exception $e) {
