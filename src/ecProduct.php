@@ -1020,15 +1020,8 @@ class ecProduct extends FrontendController
                 $tab_product_combi['ean13'] = ($ean13 && (preg_match('/^[0-9]{0,13}$/', $ean13))) ? $ean13 : '0000000000000';
                 $tab_product['ean13'] = '0000000000000';
 
-                if ('0000000000000' != $tab_product_combi['ean13']) {
-                    if (Outils::getExist($tab_product_combi['ean13'], '', 'ean13', 'declinaison')) {
-                        $tab_product_combi['ean13'] = '0000000000000'; // Si doublon d'EAN quelque pars mettre 000
-                    }
-                }
-
                 // UPC
                 $tab_product_combi['upc'] = $tab_product_combi['upc'] ?? '';
-
                 
                 // Default on
                 $tab_product_combi['default_on'] = $default_on;
@@ -1039,13 +1032,34 @@ class ecProduct extends FrontendController
                 $idPimDecli = Outils::getObjectByCrossId($tab_product_combi['crossid'], 'declinaison', $diffusion);
                 $this->timer->stop('getObjectByCrossId_declinaison');
                 if (!$idPimDecli) {
-                    $decli = json_decode(json_encode($tab_product_combi));
-                    $this->timer->start('putCreateDeclinaison');
-                    $time = microtime(true);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateDeclinaison', 3);
-                    $idPimDecli = Outils::putCreateDeclinaison($decli, $diffusion, [], $tabAssoc, []);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateDeclinaison : Time = '.(microtime(true) - $time), 3);
-                    $this->timer->stop('putCreateDeclinaison');
+                    $automatch = false;
+
+                    // AutoMatching : EAN13
+                    if ('0000000000000' != $tab_product_combi['ean13']) {
+                        $idPimDecli = Outils::getExist($tab_product_combi['ean13'], '', 'ean13', 'declinaison');
+                        $automatch = true;
+                    }
+
+                    // AutoMatching : référence (CODE_ARTICLE)
+                    if (!$idPimDecli) {
+                        $idPimDecli = Outils::getIDProductDecli('', 'declinaison', '', $tab_product_combi['crossid']);
+                        $automatch = true;
+                    }
+
+                    if ($automatch && $idPimDecli) { // Ajout du crossid
+                        $decli = DataObject::getById($idPimDecli);
+                        Outils::addCrossid($decli, $diffusion->getId(), $tab_product_combi['crossid']);
+                        $prod = DataObject::getById($decli->getParentId());
+                        Outils::addCrossid($prod, $diffusion->getId(), $tab_product['crossid']);
+                    } else { // Création d'une nouvelle déclinaison
+                        $decli = json_decode(json_encode($tab_product_combi));
+                        $this->timer->start('putCreateDeclinaison');
+                        $time = microtime(true);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateDeclinaison', 3);
+                        $idPimDecli = Outils::putCreateDeclinaison($decli, $diffusion, [], $tabAssoc, []);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateDeclinaison : Time = '.(microtime(true) - $time), 3);
+                        $this->timer->stop('putCreateDeclinaison');
+                    }
                 }
 
                 $decliList[$tab_product_combi['crossid']] = DataObject::getById($idPimDecli);
