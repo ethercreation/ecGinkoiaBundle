@@ -393,7 +393,7 @@ class ecProduct extends FrontendController
         }
 
         if (false === $files) {
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - SyncGinkoia : Impossible de scanner le dossier ' . $path, 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - SyncGinkoia : Impossible de scanner le dossier ' . $path, 3);
             return false;
         }
 
@@ -407,7 +407,7 @@ class ecProduct extends FrontendController
         }
 
         if (false === ftp_get($this->trans_stream, $localPath, $remotePath, $mode)) {
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - SyncGinkoia : Impossible de récupérer le fichier ' . $remotePath, 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - SyncGinkoia : Impossible de récupérer le fichier ' . $remotePath, 3);
             return false;
         }
 
@@ -423,7 +423,7 @@ class ecProduct extends FrontendController
         $name = basename($filename);
 
         if (false === ftp_put($this->trans_stream, $targetPath . $name, $filename, $mode)) {
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - SyncGinkoia : Impossible de poser le fichier ' . $filename, 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - SyncGinkoia : Impossible de poser le fichier ' . $filename, 3);
             return false;
         }
 
@@ -543,7 +543,7 @@ class ecProduct extends FrontendController
 
         if (!$initFileTime && (false === strpos($fileInfos, 'STOCK_*'))) {
             $this->timer->stop($timer_key);
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 3);
             return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !';
             return false;
         }
@@ -558,7 +558,7 @@ class ecProduct extends FrontendController
         $this->timer->stop('buildFromArray_'.$fileName);
         if (!is_numeric($ret)) {
             $this->timer->stop($timer_key);
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
             return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true);
             return false;
         }
@@ -648,7 +648,7 @@ class ecProduct extends FrontendController
 
         if (!$initFileTime && (false === strpos($fileInfos, 'STOCK_*'))) {
             $this->timer->stop($timer_key);
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 3);
             return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !';
             return false;
         }
@@ -663,7 +663,7 @@ class ecProduct extends FrontendController
         $this->timer->stop('buildFromArray_'.$fileName);
         if (!is_numeric($ret)) {
             $this->timer->stop($timer_key);
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
             return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true);
             return false;
         }
@@ -763,7 +763,7 @@ class ecProduct extends FrontendController
 
         if (!$initFileTime && (false === strpos($fileInfos, 'STOCK_*'))) {
             $this->timer->stop($timer_key);
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !', 3);
             return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Aucun fichier INIT_'.$fileInfos.' trouvé dans le dossier !';
             return false;
         }
@@ -778,7 +778,7 @@ class ecProduct extends FrontendController
         $this->timer->stop('buildFromArray_'.$fileName);
         if (!is_numeric($ret)) {
             $this->timer->stop($timer_key);
-            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 1);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
             return '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true);
             return false;
         }
@@ -804,7 +804,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 1;
-        // $nbCron = 166;
+        // $nbCron = 289;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -901,9 +901,9 @@ class ecProduct extends FrontendController
                     $tax = json_decode(json_encode($tab_tax));
                     $this->timer->start('putCreateTax');
                     $time = microtime(true);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateTax', 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateTax', 2);
                     $tab_product['id_tax'] = Outils::putCreateTax($tax, $diffusion, 1);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateTax : Time = '.(microtime(true) - $time), 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateTax : Time = '.(microtime(true) - $time), 2);
                     $this->timer->stop('putCreateTax');
                 }
             }
@@ -920,6 +920,7 @@ class ecProduct extends FrontendController
                 continue;
             }
 
+            $automatchProduct = false;
             $default_on = true;
             foreach ($listDecl as $item_decl) {
                 $tab_product_combi = [];
@@ -980,9 +981,9 @@ class ecProduct extends FrontendController
                         $attr = json_decode(json_encode($tab_attr));
                         $this->timer->start('putCreateAttribute');
                         $time = microtime(true);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateAttribute', 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateAttribute', 2);
                         $idPimAttr = Outils::putCreateAttribute($attr, $diffusion, 1);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateAttribute : Time = '.(microtime(true) - $time), 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateAttribute : Time = '.(microtime(true) - $time), 2);
                         $this->timer->stop('putCreateAttribute');
                     }
                         
@@ -1000,9 +1001,9 @@ class ecProduct extends FrontendController
                         $attr_value = json_decode(json_encode($tab_attr_value));
                         $this->timer->start('putCreateAttributeValue');
                         $time = microtime(true);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateAttributeValue', 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateAttributeValue', 2);
                         $idPimAttrValue = Outils::putCreateAttributeValue($attr_value, $diffusion, $idPimAttr, '');
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateAttributeValue : Time = '.(microtime(true) - $time), 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateAttributeValue : Time = '.(microtime(true) - $time), 2);
                         $this->timer->stop('putCreateAttributeValue');
                     }
 
@@ -1037,13 +1038,17 @@ class ecProduct extends FrontendController
                     // AutoMatching : EAN13
                     if ('0000000000000' != $tab_product_combi['ean13']) {
                         $idPimDecli = Outils::getExist($tab_product_combi['ean13'], '', 'ean13', 'declinaison');
-                        $automatch = true;
+                        if ($idPimDecli) {
+                            $automatch = $automatchProduct = true;
+                        }
                     }
 
                     // AutoMatching : référence (CODE_ARTICLE)
                     if (!$idPimDecli) {
                         $idPimDecli = Outils::getIDProductDecli('', 'declinaison', '', $tab_product_combi['crossid']);
-                        $automatch = true;
+                        if ($idPimDecli) {
+                            $automatch = $automatchProduct = true;
+                        }
                     }
 
                     if ($automatch && $idPimDecli) { // Ajout du crossid
@@ -1051,13 +1056,16 @@ class ecProduct extends FrontendController
                         Outils::addCrossid($decli, $diffusion->getId(), $tab_product_combi['crossid']);
                         $prod = DataObject::getById($decli->getParentId());
                         Outils::addCrossid($prod, $diffusion->getId(), $tab_product['crossid']);
+                        $prod->forcequeue = true;
+                        $prod->save();
+
                     } else { // Création d'une nouvelle déclinaison
                         $decli = json_decode(json_encode($tab_product_combi));
                         $this->timer->start('putCreateDeclinaison');
                         $time = microtime(true);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateDeclinaison', 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateDeclinaison', 2);
                         $idPimDecli = Outils::putCreateDeclinaison($decli, $diffusion, [], $tabAssoc, []);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateDeclinaison : Time = '.(microtime(true) - $time), 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateDeclinaison : Time = '.(microtime(true) - $time), 2);
                         $this->timer->stop('putCreateDeclinaison');
                     }
                 }
@@ -1087,9 +1095,9 @@ class ecProduct extends FrontendController
                     $marque = json_decode(json_encode($tab_marque));
                     $this->timer->start('putCreateMarque');
                     $time = microtime(true);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateMarque', 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateMarque', 2);
                     $marqueList = Outils::putCreateMarque($marque, $diffusion, 1);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateMarque : Time = '.(microtime(true) - $time), 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateMarque : Time = '.(microtime(true) - $time), 2);
                     $this->timer->stop('putCreateMarque');
                 }
             }
@@ -1158,9 +1166,9 @@ class ecProduct extends FrontendController
                             $this->timer->stop('putCreateCategory_'.$tab_product['name']);
                             $this->timer->start('putCreateCategory');
                             $time = microtime(true);
-                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCategory', 3);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCategory', 2);
                             $objF = Outils::putCreateCategory($categ, $diffusion, $parent, '');
-                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCategory : Time = '.(microtime(true) - $time), 3);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCategory : Time = '.(microtime(true) - $time), 2);
                             $categList[] = $objF;
                             $idPim = $objF->getId();
                             $this->timer->stop('putCreateCategory');
@@ -1170,8 +1178,6 @@ class ecProduct extends FrontendController
                 }
                 $tab_product['id_category_default'] = $dataCateg['crossid'];
             }
-
-            // return $tab_product['id_category_default'];
             
             // Caractéristiques
             if (true) {
@@ -1217,9 +1223,9 @@ class ecProduct extends FrontendController
                         $carac = json_decode(json_encode($tab_carac));
                         $this->timer->start('putCreateCarac');
                         $time = microtime(true);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCarac', 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCarac', 2);
                         $idPimCarac = Outils::putCreateCarac($carac, $diffusion, 1);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCarac : Time = '.(microtime(true) - $time), 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCarac : Time = '.(microtime(true) - $time), 2);
                         $this->timer->stop('putCreateCarac');
                     }
                         
@@ -1238,9 +1244,9 @@ class ecProduct extends FrontendController
                         $carac_value = json_decode(json_encode($tab_carac_value));
                         $this->timer->start('putCreateCaracValue');
                         $time = microtime(true);
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCaracValue', 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateCaracValue', 2);
                         $idPimCaracValue = Outils::putCreateCaracValue($carac_value, $diffusion, $idPimCarac, '');
-                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCaracValue : Time = '.(microtime(true) - $time), 3);
+                        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateCaracValue : Time = '.(microtime(true) - $time), 2);
                         $this->timer->stop('putCreateCaracValue');
                     }
 
@@ -1272,31 +1278,72 @@ class ecProduct extends FrontendController
             $this->timer->start('getExist_product');
             $idPimProduct = Outils::getExist($tab_product['crossid'], $diffusion, 'crossid', 'product');
             $this->timer->stop('getExist_product');
-            if (!$idPimProduct) {
+            if (!$automatchProduct && !$idPimProduct) {
                 $this->timer->start('putCreateProduct');
                 $categList = array_unique($categList);
                 $time = microtime(true);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateProduct', 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateProduct', 2);
                 $idPimProduct = Outils::putCreateProduct($prod, $diffusion, $categList, $caracList, $marqueList, $imageList, $decliList, $langPS, 1);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateProduct : Time = '.(microtime(true) - $time), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateProduct : Time = '.(microtime(true) - $time), 2);
                 $this->timer->stop('putCreateProduct');
 
                 // return $idPimProduct;
             } else {
-                $this->timer->start('putUpdateDeclinaison');
-                $time = microtime(true);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putUpdateDeclinaison_'.$idPimProduct, 3);
-                Outils::putUpdateDeclinaison($idPimProduct, $decliList, $diffusion);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putUpdateDeclinaison_'.$idPimProduct.' : Time = '.(microtime(true) - $time), 3);
-                $this->timer->stop('putUpdateDeclinaison');
+                if ($idPimProduct) {
+                    $this->timer->start('putUpdateDeclinaison');
+                    $time = microtime(true);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putUpdateDeclinaison_'.json_encode($idPimProduct), 2);
+                    Outils::putUpdateDeclinaison($idPimProduct, $decliList, $diffusion);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putUpdateDeclinaison_'.json_encode($idPimProduct).' : Time = '.(microtime(true) - $time), 2);
+                    $this->timer->stop('putUpdateDeclinaison');
 
-                
-                $this->timer->start('productIsActive');
-                $this->productIsActive($idPimProduct, $diffusion);
-                $this->timer->stop('productIsActive');
+                    
+                    $this->timer->start('productIsActive');
+                    $this->productIsActive($idPimProduct, $diffusion);
+                    $this->timer->stop('productIsActive');
+                }
             }
 
-            if ('72998' == $idPimProduct) {
+            if ($automatchProduct && $idPimProduct) {
+                if ($categList != 0) {
+                    $idcat = Outils::getExist($prod->id_category_default, $diffusion->getID(), 'crossid', 'category');
+                    $objP = DataObject::getById($idPimProduct);
+
+
+                    $listDiffusion = $objP->getDiffusion();
+                    $listDiffusionActive = $objP->getDiffusions_active();
+                    foreach ($categList as $categ) {
+                        $diffusionMeta = new ElementMetaData('diffusion', ['id_diffusion', 'is_default'], $categ);
+                        $diffusionMeta->setElement($categ);
+                        $diffusionMeta->setData(
+                            [
+                                'id_diffusion' => $diffusion->getID(),
+                                'is_default' => ($idcat == $categ->getId() ? 1 : ''),
+                            ],
+                        );
+
+                        $listDiffusion[] = $diffusionMeta;
+                    }
+                    $listDiffusionActive[] = $diffusion->getID();
+
+                    // replace old ones by new set and save
+                    $objP->setDiffusion($listDiffusion);
+                    $objP->setDiffusions_active(array_unique($listDiffusionActive));
+                    $objP->setCategory_default($idcat);
+                    \Pimcore\Model\Version::disable();
+
+                    try {
+                        $objP->save(['versionNote' => '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ')']);
+                    } catch (\Exception $e) {
+                        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur integration : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, $objP, 'error_save');
+                        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur integration : ' . json_encode($prod), 3, $objP, 'error_save');
+                        // return $e->getMessage();
+                    }
+                    \Pimcore\Model\Version::enable();
+                }
+            }
+
+            if ('75537' == $idPimProduct) {
                 // return 'bloqué';
             }
         }
@@ -1321,7 +1368,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
-        // $nbCron = 2970;
+        // $nbCron = 603;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1366,6 +1413,12 @@ class ecProduct extends FrontendController
                 $this->timer->stop('getById_produit');
             }
 
+            $objP = DataObject::getById($idPimProduct);
+            if (!($objP instanceof Product)) {
+                continue;
+            }
+
+
             if (71924 != $idPimProduct) {
                 // continue;
             }
@@ -1406,7 +1459,7 @@ class ecProduct extends FrontendController
             try {
                 $this->timer->start('addMouvementStock');
                 $time = microtime(true);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.$idPimProduct.'-'.$idPimDecli, 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.json_encode($idPimProduct).'-'.json_encode($idPimDecli), 2);
                 $id_mvt = Outils::addMouvementStock(
                     $idPimProduct,
                     $idPimDecli,
@@ -1418,11 +1471,11 @@ class ecProduct extends FrontendController
                     $diffusion, // Diffusion
                     0, // Source
                     '', // Emplacement
-                    'MAJ from '.$connector->diffusion_name,
+                    'MAJ from '.$connector->diffusion_name.' - Produit '.$idPimProduct.'-'.$idPimDecli.' - Stock '.$stock.' - Location '.$tab_product['location'].' - Crossid '.$tab_product['crossid'],
                     $prix, // Prix
                     $date_U
                 );
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
                 $this->timer->stop('addMouvementStock');
                 // $tab_log[] = [
                 //     $idPimProduct,
@@ -1430,9 +1483,9 @@ class ecProduct extends FrontendController
                 //     $stock
                 // ];
 
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : mouvement -> ' . $id_mvt . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : mouvement -> ' . $id_mvt . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 2);
             } catch (Exception $e) {
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
             }
         }
 
@@ -1443,7 +1496,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
-        // $nbCron = 59;
+        $nbCron = 108;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1521,14 +1574,14 @@ class ecProduct extends FrontendController
                 try {
                     $this->timer->start('putCreatePriceSell');
                     $time = microtime(true);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli, 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli, 2);
                     Outils::putCreatePriceSell($idPimProduct, $idPimDecli, $diffusion->getId(), 1, 1, 1, (float) $tab_product['pmvc']);
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
                     $this->timer->stop('putCreatePriceSell');
 
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 2);
                 } catch (Exception $e) {
-                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
                 }
 
                 /**
@@ -1549,14 +1602,14 @@ class ecProduct extends FrontendController
                         try {
                             $this->timer->start('putCreatePriceSell_OC');
                             $time = microtime(true);
-                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 3);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 2);
                             Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) $lineOC['PRIX_ARTICLE'], date_start: $begin, date_end: $end);
-                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 3);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
                             $this->timer->start('putCreatePriceSell_OC');
                     
-                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 1);
+                            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : prix -> ' . $tab_product['pmvc'] . ', stock '.$tab_product['stock'].', location -> '.$tab_product['location'], 2);
                         } catch (Exception $e) {
-                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+                            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
                         }
                     }
                 }
@@ -1667,7 +1720,7 @@ class ecProduct extends FrontendController
                     $date_U
                 );
 
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : mouvement -> ' . $id_mvt . ', stock '.$stock, 3);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : mouvement -> ' . $id_mvt . ', stock '.$stock, 2);
             }
         } catch (Exception $e) {
             Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ Stock ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
@@ -1724,13 +1777,13 @@ class ecProduct extends FrontendController
             try {
                 $this->timer->start('setNullStock');
                 $time = microtime(true);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 2);
                 Outils::resetStock($obj->getId());
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 3);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 2);
                 $this->timer->stop('setNullStock');
 
             } catch (Exception $e) {
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ setNullStock ('.$obj->getId().') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 1, '', 'error_save');
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ setNullStock ('.$obj->getId().') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
             }
 
             if (1 == $obj->getPublished()) {
