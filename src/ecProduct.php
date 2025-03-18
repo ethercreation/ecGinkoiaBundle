@@ -1368,7 +1368,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
-        // $nbCron = 603;
+        // $nbCron = 761;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1422,7 +1422,7 @@ class ecProduct extends FrontendController
             if (71924 != $idPimProduct) {
                 // continue;
             }
-            // $this->collect->addInfo($idPimProduct.'-'.$idPimDecli);
+            $this->collect->addInfo($idPimProduct.'-'.$idPimDecli);
 
             // Récupération de l'ID d'entrepôt
             $this->timer->start('getObjectByCrossId_entrepot');
@@ -1459,7 +1459,7 @@ class ecProduct extends FrontendController
             try {
                 $this->timer->start('addMouvementStock');
                 $time = microtime(true);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.json_encode($idPimProduct).'-'.json_encode($idPimDecli), 2);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.json_encode($idPimProduct).'-'.json_encode($idPimDecli), 2);
                 $id_mvt = Outils::addMouvementStock(
                     $idPimProduct,
                     $idPimDecli,
@@ -1475,7 +1475,7 @@ class ecProduct extends FrontendController
                     $prix, // Prix
                     $date_U
                 );
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock ('.$id_mvt.') '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
                 $this->timer->stop('addMouvementStock');
                 // $tab_log[] = [
                 //     $idPimProduct,
@@ -1496,7 +1496,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 0;
-        $nbCron = 108;
+        // $nbCron = 143;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
