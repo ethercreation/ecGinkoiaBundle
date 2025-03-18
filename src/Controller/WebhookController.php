@@ -55,10 +55,10 @@ class WebhookController extends FrontendController
         $Obj = $objHook->getObjectHistory();
         $stat = $objHook->getOrder_state();
         $ts = time();
-        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 3);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 2);
         $configPaymentValide = json_decode(Dataobject::getByPath('/Config/paiement_valide')->getValeur(), true);
         if (!in_array($stat->getId(), $configPaymentValide)) {
-            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Statut de la commande, non valide', 3);
+            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Statut de la commande, non valide', 2);
             return true;
         }
 
@@ -79,27 +79,27 @@ class WebhookController extends FrontendController
 
                 $diffusionIds = $product->getDiffusions_active();
                 if (in_array($diffusion->getId(), $diffusionIds)) {
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 2);
                     $found = true;
                 }
             }
 
             if (true === $found || $forceSendOrder) { // Si un produit est trouvé Ginkoia est trouvé alors associer Tag
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Ajout du Tag "PushToGinkoia"', 3);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Ajout du Tag "PushToGinkoia"', 2);
                 Outils::addTag($Obj, 'PushToGinkoia');
                 return true;
             }
 
-            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Ne rien faire', 3);
+            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Ne rien faire', 2);
             // return true;
             // foreach ($Obj->getCrossid() as $crossid) {
-            //     Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid, 3);
+            //     Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid, 2);
             //     if ($diffusion->getId() != $crossid->getElementId()) {
-            //         Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' non traité par la diffusion '.$diffusion->getId(), 3);
+            //         Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' non traité par la diffusion '.$diffusion->getId(), 2);
             //         continue;
             //     }
                 
-            //     Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' lancement de la createOrder p la diffusion '.$diffusion->getId(), 3);
+            //     Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' commande '.$crossid.' lancement de la createOrder p la diffusion '.$diffusion->getId(), 2);
             //     $this->createOrder($Obj);
             // }
         }
@@ -110,22 +110,22 @@ class WebhookController extends FrontendController
     {
         $obj = $params['order'];
         $ts = time();
-        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 3);
+        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 2);
 
         if ('order' == $obj->getClassName()) {
             if (!Outils::hasTag($obj, 'PushToGinkoia')) {
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Ne posède pas le Tag "PushToGinkoia"', 3);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Ne posède pas le Tag "PushToGinkoia"', 2);
                 return true;
             }
 
             if ($this->createOrder($obj)) {
                 Outils::deleteTag($obj, 'PushToGinkoia');
                 Outils::addTag($obj, 'CheckToGinkoia');
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Transmise à Ginkoia et passe dans le Tag "CheckToGinkoia"', 3);
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Commande '.$obj->getId().' - Transmise à Ginkoia et passe dans le Tag "CheckToGinkoia"', 2);
             }
         }
 
-        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' END', 3);
+        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' END', 2);
         return true;
     }
 
@@ -167,7 +167,7 @@ class WebhookController extends FrontendController
                 
                 $diffusionIds = $product->getDiffusions_active();
                 if (!in_array($diffusion->getId(), $diffusionIds)) {
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 3);
+                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 2);
                     continue;
                 }
             }
@@ -296,9 +296,6 @@ class WebhookController extends FrontendController
         $pretty_xml = self::prettyXML($xml_sxe->asXML());
         file_put_contents($dirDepot.$file, $pretty_xml);
         file_put_contents($dirArchive.$file, $pretty_xml);
-
-
-
 
         return true;
     }
