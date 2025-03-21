@@ -55,10 +55,10 @@ class WebhookController extends FrontendController
         $Obj = $objHook->getObjectHistory();
         $stat = $objHook->getOrder_state();
         $ts = time();
-        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 2);
+        Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' START - '.json_encode($params), 2);
         $configPaymentValide = json_decode(Dataobject::getByPath('/Config/paiement_valide')->getValeur(), true);
         if (!in_array($stat->getId(), $configPaymentValide)) {
-            // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Statut de la commande, non valide', 2);
+            Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - '.$ts.' Statut de la commande, non valide', 2);
             return true;
         }
 
@@ -79,7 +79,7 @@ class WebhookController extends FrontendController
 
                 $diffusionIds = $product->getDiffusions_active();
                 if (in_array($diffusion->getId(), $diffusionIds)) {
-                    // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 2);
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') Commande '.$Obj->getId().' - Le produit '.$detail->getReference().' ('.$idPimProduct.'-'.$idPimDecli.') est dans la diffusion Ginkoia', 2);
                     $found = true;
                 }
             }
