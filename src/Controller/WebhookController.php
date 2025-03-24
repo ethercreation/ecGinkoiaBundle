@@ -220,8 +220,8 @@ class WebhookController extends FrontendController
         }
         
         $postData = [
-            'CommandeNum' => $order->getId_order(),
-            'CommandeId' => substr($order->getId_order(), 0, 9),
+            'CommandeNum' => trim($order->getId_order(), '#'),
+            'CommandeId' => trim(substr($order->getId_order(), 0, 9), '#'),
             'CommandeDate' => $order->getDate_add()->format('Y-m-d H:i:s'),
             'Statut' => 'PAYE', // PAYE // CHEQUE
             'ModeReglement' => '', //Doit être vide si l'on utilise la balise reglements
