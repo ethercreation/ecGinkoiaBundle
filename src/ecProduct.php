@@ -805,7 +805,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 1;
-        $nbCron = 1;
+        // $nbCron = 249;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1278,7 +1278,7 @@ class ecProduct extends FrontendController
             $tab_product['manufacturer'] = $tab_product['manufacturer'] ?? '0';
             
             // Description
-            $tab_product['description'] = ($tab_product['description'].' '.$tab_product['composition'].' <br> '.self::arrayToHtmlTable([$feat], false));
+            $tab_product['description'] = ($tab_product['description'].' '.$tab_product['composition'].' <br> '.self::arrayToHtmlTable([$feat], true));
 
             // return $tab_product;
 
