@@ -101,7 +101,8 @@ class ecProduct extends FrontendController
     ];
     public $tab_feat = [
         'Saison' => 'COLLECTION',
-
+        'Chrono' => 'CODE_CHRONO',
+        'Reference' => 'CODE_FOURN',
     ];
     public $tab_attr = [
         'crossid' => 'CODE_ARTICLE',
@@ -804,7 +805,7 @@ class ecProduct extends FrontendController
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 1;
-        // $nbCron = 289;
+        $nbCron = 1;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1090,7 +1091,7 @@ class ecProduct extends FrontendController
             if (true) {
                 $manufacturerCrossid = $tab_product['manufacturer'] ?? 'NC';
                 if ($idPim = Outils::getObjectByCrossId($manufacturerCrossid, 'marque', $diffusion)) {
-                    $marqueList = $idPim;
+                    $marqueList = DataObject::getById($idPim);
                 } else {
                     $tab_marque = [
                         'crossid' => $manufacturerCrossid,
@@ -1105,7 +1106,7 @@ class ecProduct extends FrontendController
                     $this->timer->start('putCreateMarque');
                     $time = microtime(true);
                     // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreateMarque', 2);
-                    $marqueList = Outils::putCreateMarque($marque, $diffusion, 1);
+                    $marqueList = DataObject::getById(Outils::putCreateMarque($marque, $diffusion, 1));
                     // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreateMarque : Time = '.(microtime(true) - $time), 2);
                     $this->timer->stop('putCreateMarque');
                 }
@@ -1277,7 +1278,7 @@ class ecProduct extends FrontendController
             $tab_product['manufacturer'] = $tab_product['manufacturer'] ?? '0';
             
             // Description
-            $tab_product['description'] = ($tab_product['description'].' '.$tab_product['composition']);
+            $tab_product['description'] = ($tab_product['description'].' '.$tab_product['composition'].' <br> '.self::arrayToHtmlTable([$feat], false));
 
             // return $tab_product;
 
@@ -1840,6 +1841,34 @@ class ecProduct extends FrontendController
         }
 
         return true;
+    }
+
+    public static function arrayToHtmlTable(array $array, bool $separate_header = false, string $table_id = null, string $tr_class = null, string $td_class = null, string $th_class = null, string $css = null)
+    {
+        $table = '<table' . ($table_id ? ' id="'.$table_id.'"':'') . '>';
+        $tr = '<tr' . ($tr_class ? ' class="'.$tr_class.'"':'') . '>';
+        $td = '<td' . ($td_class ? ' class="'.$td_class.'"':'') . '>';
+        $th = '<th' . ($th_class ? ' class="'.$th_class.'"':'') . '>';
+        $style = $css ? ((0 === stripos($css, '<style')) ? $css : '<style>' . $css . '</style>') : '';
+
+        $header = $footer = '';
+        if ($separate_header) {
+            $first_line = reset($array);
+            if (range(0, count($first_line) - 1) == array_keys($first_line)) {
+                $first_line = array_shift($array);
+            } else {
+                $first_line = array_keys($first_line);
+            }
+            $header = '<thead>'. $tr . $th . implode('</th>' . $th, $first_line) . '</th></tr></thead><tbody>';
+            $footer = '</tbody>';
+        }
+
+        return $style . $table . $header . $tr . $td . self::arrayToCsv($array, '</td>' . $td, '</td></tr>' . $tr . $td) . '</td></tr>' . $footer . '</table>';
+    }
+    
+    public static function arrayToCsv(array $array, string $fs = ';', string $ls = "\n", string $fe = '')
+    {
+        return $fe . implode($fe . $ls . $fe, array_map('implode', array_fill(0, count($array), $fe . $fs . $fe), $array)) . $fe;
     }
             
 
