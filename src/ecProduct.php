@@ -53,7 +53,7 @@ class ecProduct extends FrontendController
     public $prix_price_name = 'prix_price_ginkoia';
     public $oc_name = 'oc_ginkoia';
 
-    public $artWeb = '*ARTWEB_4.TXT';
+    public $artWeb = 'INIT_ARTWEB_4.TXT';
     public $nomenclature = '*NOMENCLATURE_2.TXT';
     public $artNomenk = '*ARTNOMENK_2.TXT';
     public $prix = '*PRIX_2.TXT';
@@ -801,11 +801,15 @@ class ecProduct extends FrontendController
         return true;
     }
 
+    /**
+     * MAJ Catalogue
+     */
+
     public function cronFillCatalog(array $params)
     {
         $cron = $params['nbParent'] ?? 'manualTest';
         $nbCron = $params['nbCron'] ?? 1;
-        // $nbCron = 249;
+        // $nbCron = 255;
         $stopTime = $params['stopTime'] ?? (time() + 15);
         $connector = new connector();
         $diffusion = $connector->getDiffusion();
@@ -1371,19 +1375,193 @@ class ecProduct extends FrontendController
         return ($json->currentLine >= $json->maxLine) ? true : $json->currentLine;
     }
     
+    public function cronUpdateFluctuMinus(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 1;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+
+        $lstGinkoia = array_column(Outils::query('SELECT DISTINCT(CODE_MODELE) FROM `eci_midle_file_catalogue_ginkoia`'), 'CODE_MODELE');
+        
+        $lists = ecMiddleController::getRequireOrDependBy($diffusion->getId(), 'object', false);
+        
+        foreach ($lists as $i => $item) {
+            if ($i < $nbCron) {
+                continue;
+            }
+            if (time() > $stopTime) {
+                return $i;
+            }
+            $obj = DataObject::getById($item['id']);
+            if (is_object($obj) || ('product' != $obj->getClassName())) {
+                continue; // Ce n'est pas un produit
+            }
+
+            $crossid = '';
+            $lstCrossid = $obj->getCrossid();
+            foreach ($lstCrossid as $objCrossid) {
+                if ($objCrossid->getElementId() != $diffusion->getId()) {
+                    continue; // Nous ne sommes pas responsable de ces diffusions
+                }
+                $crossid = $objCrossid->getData()['ext_id'] ?? '';
+            }
+
+            if (empty($crossid)) {
+                continue; // Le crossid est vide
+            }
+            if (in_array($crossid, $lstGinkoia)) {
+                continue; // Le produit est toujours dans le flux
+            }
+
+            if (!Outils::hasTag($obj, 'deref')) {
+                Outils::addTag($obj, 'deref');
+            }
+
+            // Mettre les stock des déclinaisons à 0
+            try {
+                $this->timer->start('setNullStock');
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 2);
+                Outils::resetStock($obj->getId());
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 2);
+                $this->timer->stop('setNullStock');
+
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ setNullStock ('.$obj->getId().') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
+            }
+
+            if (1 == $obj->getPublished()) {
+                // Modification du produit
+                try {
+                    $obj->setPublished(false); // On désactive le produit
+                    $obj->save(['versionNote' => '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ')']);
+                } catch (Exception $e) {
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur Deref : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, $obj, 'error_save');
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public function cronUpdateFluctuMinusFast(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+
+        $fileName = $this->catalog_name.'_tmp';
+        $this->collect->addInfo('START '.__FUNCTION__.', nbCron ('.$nbCron.')');
+        
+        if (!$nbCron) { // Premier tour de boucle
+            $this->timer->start('DbFile');
+            $tab_json = [];
+            $json = new DbFile($this->catalog_name);
+
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+
+            $json->buildIndex('CODE_MODELE');
+            $this->timer->stop('DbFile');
+
+            // Récupérer la liste des produits qui ne sont plus au catalogue
+            $sql = 'SELECT p.oo_id AS idPimProduct, mp.data as crossid, g.CODE_MODELE
+                FROM object_query_' . Outils::getIDClass('product') . ' p
+                LEFT JOIN object_metadata_' . Outils::getIDClass('product') . ' mp ON p.oo_id = mp.id AND mp.dest_id = '.$diffusion->getId().' AND mp.`column` = "ext_id"
+                LEFT JOIN ' . $json->getTableName() . ' g ON g.CODE_MODELE = mp.data
+                WHERE 1
+                AND (p.archive IS NULL OR p.archive = 0)
+                AND mp.id IS NOT NULL
+                AND g.CODE_MODELE IS NULL
+                GROUP BY p.oo_id
+                ORDER BY p.oo_id';
+            $this->collect->addInfo('Query : '.$sql);
+            
+            $this->timer->start('Query');
+            $lst = Outils::query($sql);
+            $this->collect->addInfo('MaxLine ('.count($lst).')');
+            $this->timer->stop('Query');
+
+            if (is_array($lst) && empty($lst)) {
+                return true;
+            }
+
+            // Transformation
+            $this->timer->start('buildFromArray');
+            $ret = DbFile::buildFromArray($lst, $fileName);
+            $this->timer->stop('buildFromArray');
+            if (!is_numeric($ret)) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
+                return false;
+            }
+        }
+
+        $json = new DbFile($fileName);
+
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+            
+            $obj = DataObject::getById($item['idPimProduct']);
+            if (!is_object($obj) || ('product' != $obj->getClassName())) {
+                continue; // Ce n'est pas un produit
+            }
+
+            if (!Outils::hasTag($obj, 'deref')) {
+                Outils::addTag($obj, 'deref');
+            }
+
+            // Mettre les stock des déclinaisons à 0
+            try {
+                $this->timer->start('setNullStock');
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 2);
+                Outils::resetStock($obj->getId());
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 2);
+                $this->timer->stop('setNullStock');
+
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ setNullStock ('.$obj->getId().') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
+            }
+
+            if (1 == $obj->getPublished()) {
+                // Modification du produit
+                try {
+                    $obj->setPublished(false); // On désactive le produit
+                    $obj->save(['versionNote' => '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ')']);
+                } catch (Exception $e) {
+                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur Deref : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, $obj, 'error_save');
+                }
+            }
+        }
+
+        return true;
+    }
+    
     public function calculatePrices($pa, $pv, $tr = 20)
     {
-        $pattc = str_replace(',', '.', $pa);
-        $pvttc = str_replace(',', '.', $pv);
-        $taxrate = str_replace(',', '.', $tr);
+        $price = (float) str_replace(',', '.', $pa);
+        $pmvc = (float) str_replace(',', '.', $pv);
+        $taxrate = (float) str_replace(',', '.', $tr);
 
         // correction of price
-        $price = $pattc * (100 / (100 + $taxrate));
-        $pmvc = $pvttc * (100 / (100 + $taxrate));
+        // $price = $pattc * (100 / (100 + $taxrate));
+        // $pmvc = $pvttc * (100 / (100 + $taxrate));
 
         return ['price' => round($price, 6), 'pmvc' => round($pmvc, 6)];
     }
 
+    /**
+     * MAJ Stock
+     */
     public function cronUpdateStock(array $params)
     {
         $cron = $params['nbParent'] ?? 'manualTest';
@@ -1510,8 +1688,114 @@ class ecProduct extends FrontendController
         }
 
         return true;
+    } 
+
+    public function cronUpdateStockFast(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+        $date_U = Carbon::parse(date('Y-m-d H:i:s'))->format('U');
+        
+        $fileName = $this->stock_name.'_tmp';
+        $this->collect->addInfo('START '.__FUNCTION__.', nbCron ('.$nbCron.')');
+
+        if (!$nbCron) { // Premier tour de boucle
+            $this->timer->start('DbFile');
+            $tab_json = [];
+            $json = new DbFile($this->stock_name);
+
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+
+            $json->buildIndex('CODE_ARTICLE');
+            $json->buildIndex('MAG_ID');
+            $json->buildIndex('QTE_STOCK');
+            $this->timer->stop('DbFile');
+            
+            // Récupérer la liste des lignes dont les stocks ont été modifié ou sont vide
+            $sql = 'SELECT g.CODE_ARTICLE AS crossid, g.MAG_ID AS location, g.QTE_STOCK AS newStock, p.oo_id AS idPimProduct, d.oo_id AS idPimDecli, e.oo_id AS idPimEntrepot, s.quantity_physique, s.stock_entrepot__id
+                FROM ' . $json->getTableName() . ' g
+                LEFT JOIN object_metadata_' . Outils::getIDClass('entrepot') . ' me ON me.dest_id = '.$diffusion->getId().' AND me.`column` = "ext_id" AND g.MAG_ID = me.data
+                LEFT JOIN object_query_' . Outils::getIDClass('entrepot') . ' e ON e.oo_id = me.id AND (e.archive IS NULL OR e.archive = 0)
+                LEFT JOIN object_metadata_' . Outils::getIDClass('declinaison') . ' md ON md.dest_id = '.$diffusion->getId().' AND md.`column` = "ext_id" AND g.CODE_ARTICLE = md.data
+                LEFT JOIN object_query_' . Outils::getIDClass('declinaison') . ' d ON d.oo_id = md.id AND (d.archive IS NULL OR d.archive = 0)
+                LEFT JOIN object_relations_' . Outils::getIDClass('product') . ' rp ON rp.dest_id = d.oo_id AND rp.fieldname = "decli"
+                LEFT JOIN object_query_' . Outils::getIDClass('product') . ' p ON p.oo_id = rp.src_id AND (p.archive IS NULL OR p.archive = 0)
+                LEFT JOIN object_query_' . Outils::getIDClass('stock') . ' s ON p.oo_id = s.stock_product__id AND d.oo_id = s.stock_declinaison__id AND (s.archive IS NULL OR s.archive = 0) AND e.oo_id = s.stock_entrepot__id
+                WHERE 1
+                AND d.oo_id IS NOT NULL
+                AND p.oo_id IS NOT NULL
+                AND (g.QTE_STOCK != s.quantity_physique OR s.oo_id IS NULL)  
+                AND (g.QTE_STOCK != 0 AND s.oo_id IS NULL)  
+                ORDER BY p.oo_id ASC';
+            $this->collect->addInfo('Query : '.$sql);
+
+            $this->timer->start('Query');
+            $lst = Outils::query($sql);
+            $this->collect->addInfo('MaxLine ('.count($lst).')');
+            $this->timer->stop('Query');
+
+            if (is_array($lst) && empty($lst)) {
+                return true;
+            }
+
+            // Transformation
+            $this->timer->start('buildFromArray');
+            $ret = DbFile::buildFromArray($lst, $fileName);
+            $this->timer->stop('buildFromArray');
+            if (!is_numeric($ret)) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
+                return false;
+            }
+        }
+
+        $json = new DbFile($fileName);
+
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+
+            $this->collect->addInfo('Stock ('.$item['idPimProduct'].'-'.$item['idPimDecli'].') => '.$item['crossid']. ' // newStock '.$item['newStock']. ' // Entrepot '.$item['location']);
+
+            try {
+                $this->timer->start('addMouvementStock');
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START addMouvementStock '.json_encode($idPimProduct).'-'.json_encode($idPimDecli), 2);
+                $id_mvt = Outils::addMouvementStock(
+                    $item['idPimProduct'],
+                    $item['idPimDecli'],
+                    '=', // Delta => +/-/=
+                    0, // Type de stock => 0 pour Physique // 1 pour Réserve // 2 pour Attente
+                    0,
+                    $item['newStock'],
+                    $item['idPimEntrepot'], // Entrepot
+                    $diffusion, // Diffusion
+                    0, // Source
+                    '', // Emplacement
+                    'MAJ from '.$connector->diffusion_name.' - Produit '.$item['idPimProduct'].'-'.$item['idPimDecli'].' - Stock '.$item['newStock'].' - Location '.$item['location'].' - Crossid '.$item['crossid'],
+                    '', // Prix
+                    $date_U
+                );
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END addMouvementStock ('.$id_mvt.') '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
+                $this->timer->stop('addMouvementStock');
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ Stock ('.$item['idPimProduct'].'-'.$item['idPimDecli'].') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile());
+            }
+        }
+
+        return true;
     }
     
+    /**
+     * MAJ PRIX
+     */
     public function cronUpdatePrice(array $params)
     {
         $cron = $params['nbParent'] ?? 'manualTest';
@@ -1585,8 +1869,8 @@ class ecProduct extends FrontendController
 	        $linePrice = DbFile::arJsonDecodeRecur(Outils::query('SELECT * FROM `eci_midle_file_prix_price_ginkoia` WHERE CODE_ARTICLE = "'.$tab_product['decl_reference'].'"'), true);
             $this->timer->stop('DbFile_select_prix');
             if (isset($linePrice[0][$this->tab_attr['price']])) {
-                $tab_product['price'] = $linePrice[0][$this->tab_attr['price']];
-                $tab_product['pmvc'] = $linePrice[0][$this->tab_attr['pmvc']];
+                $tab_product['price'] = str_replace(',', '.', $linePrice[0][$this->tab_attr['price']]);
+                $tab_product['pmvc'] = str_replace(',', '.', $linePrice[0][$this->tab_attr['pmvc']]);
                 // $tab_prices = $this->calculatePrices($tab_product['price'], $tab_product['pmvc'], $rate);
                 // $tab_product['price'] = $tab_prices['price'];
                 // $tab_product['pmvc'] = $tab_prices['pmvc'];
@@ -1623,7 +1907,7 @@ class ecProduct extends FrontendController
                             $this->timer->start('putCreatePriceSell_OC');
                             $time = microtime(true);
                             // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 2);
-                            Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) $lineOC['PRIX_ARTICLE'], date_start: $begin, date_end: $end);
+                            Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) str_replace(',', '.', $lineOC['PRIX_ARTICLE']), date_start: $begin, date_end: $end);
                             // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
                             $this->timer->start('putCreatePriceSell_OC');
                     
@@ -1633,6 +1917,264 @@ class ecProduct extends FrontendController
                         }
                     }
                 }
+            }
+        }
+
+        return true;
+    }
+
+    public function cronUpdatePriceFast(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+
+        $fileName = $this->prix_price_name.'_tmp';
+        $this->collect->addInfo('START '.__FUNCTION__.', nbCron ('.$nbCron.')');
+        
+        // reset des indexes des json, sinon on risque de travailler avec des indexes obsolètes
+        if (!$nbCron) {
+            $this->timer->start('DbFile');
+            $tab_json = [];
+            $json = new DbFile($this->prix_price_name);
+
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+
+            $json->buildIndex('CODE_ARTICLE');
+            $json->buildIndex('PXVTE');
+            $this->timer->stop('DbFile');
+
+            // Récupérer la liste des lignes dont les déclinaisons n'ont pas le bon prix ou n'ont pas de prix
+            $sql = 'SELECT g.CODE_ARTICLE AS crossid, REPLACE(g.PXVTE, ",", ".") AS newPrice, ps.oo_id AS idPimPriceSelling, ps.price_ttc AS oldPrice
+                FROM ' . $json->getTableName() . ' g
+                LEFT JOIN object_metadata_' . Outils::getIDClass('declinaison') . ' md ON md.dest_id = '.$diffusion->getId().' AND `column` = "ext_id" AND g.CODE_ARTICLE = md.data
+                LEFT JOIN object_query_' . Outils::getIDClass('declinaison') . ' d ON d.oo_id = md.id AND (d.archive IS NULL OR d.archive = 0)
+                LEFT JOIN object_relations_' . Outils::getIDClass('product') . ' rp ON rp.dest_id = d.oo_id AND rp.fieldname = "decli"
+                LEFT JOIN object_query_' . Outils::getIDClass('product') . ' p ON p.oo_id = rp.src_id AND (p.archive IS NULL OR p.archive = 0)
+                LEFT JOIN object_query_' . Outils::getIDClass('priceSelling') . ' ps ON d.oo_id = ps.decli__id AND ps.date_start IS NULL AND ps.date_end IS NULL AND (ps.archive IS NULL OR ps.archive = 0)
+                WHERE 1
+                AND d.oo_id IS NOT NULL
+                AND p.oo_id IS NOT NULL
+                AND (REPLACE(g.PXVTE, ",", ".") != ps.price_ttc OR ps.price_ttc IS NULL)';
+            $this->collect->addInfo('Query : '.$sql);
+            
+            $this->timer->start('Query');
+            $lst = Outils::query($sql);
+            $this->collect->addInfo('MaxLine ('.count($lst).')');
+            $this->timer->stop('Query');
+
+            if (is_array($lst) && empty($lst)) {
+                return true;
+            }
+
+            // Transformation
+            $this->timer->start('buildFromArray');
+            $ret = DbFile::buildFromArray($lst, $fileName);
+            $this->timer->stop('buildFromArray');
+            if (!is_numeric($ret)) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
+                return false;
+            }
+        }
+
+        $json = new DbFile($fileName);
+
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+
+            $this->timer->start('getObjectByCrossId_declinaison');
+            $idPimDecli = Outils::getObjectByCrossId($item['crossid'], 'declinaison', $diffusion);
+            $this->timer->stop('getObjectByCrossId_declinaison');
+            if (!$idPimDecli) { // Produit Simple
+                continue;
+            } else { // Produit décliné
+                $this->timer->start('getById');
+                $idPimProduct = DataObject::getById($idPimDecli)->getParentId();
+                $this->timer->stop('getById');
+            }
+
+            $this->collect->addInfo('Price ('.$idPimProduct.'-'.$idPimDecli.') => '.$item['crossid']. ' // newPrice '.$item['newPrice']. ' // oldPrice ('.(int) $item['idPimPriceSelling'].') '.$item['oldPrice']);
+            
+            try {
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli, 2);
+                $this->timer->start('putCreatePriceSell');
+                Outils::putCreatePriceSell($idPimProduct, $idPimDecli, $diffusion->getId(), 1, 1, 1, (float) $item['newPrice']);
+                $this->timer->stop('putCreatePriceSell');
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ PRIX ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile());
+            }
+        }
+
+        return true;
+    }
+
+    public function cronUpdatePromo(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+        $now = Carbon::parse(time())->format('Y-m-d\\TH:i');
+
+        if (!$this->config['use_oc']) {
+            return true;
+        }
+        
+        $this->timer->start('DbFile');
+        $tab_json = [];
+        $json = new DbFile($this->oc_name);
+        
+        // reset des indexes des json, sinon on risque de travailler avec des indexes obsolètes
+        if (!$nbCron) {
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+        }
+        $this->timer->stop('DbFile');
+
+        
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+
+            $this->timer->start('getObjectByCrossId_declinaison');
+            $idPimDecli = Outils::getObjectByCrossId($item['CODE_ARTICLE'], 'declinaison', $diffusion);
+            $this->timer->stop('getObjectByCrossId_declinaison');
+            if (!$idPimDecli) { // Produit Simple
+                continue;
+            } else { // Produit décliné
+                $this->timer->start('getById');
+                $idPimProduct = DataObject::getById($idPimDecli)->getParentId();
+                $this->timer->stop('getById');
+            }
+
+            if ('01/01/1950' == $item['DATE_DEBUT']) {
+                $lineOC['DATE_DEBUT'] = '01/01/2020';
+            }
+            $begin = Carbon::parse(implode('-', array_reverse(explode('/', $item['DATE_DEBUT']))).' 00:00:00')->format('Y-m-d\\TH:i');
+            $end = Carbon::parse(implode('-', array_reverse(explode('/', $item['DATE_FIN']))).' 23:59:59')->format('Y-m-d\\TH:i');
+
+            if ($now > $begin) {
+                continue;
+            }
+            if ($end < $now) {
+                continue;
+            }
+
+            $this->collect->addInfo('OC '.$item['CODE_ARTICLE'].' : '.json_encode([$begin,$end]));
+            try {
+                $time = microtime(true);
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli, 2);
+                $this->timer->start('putCreatePriceSell');
+                Outils::putCreatePriceSell(id_prod: $idPimProduct, id_declinaison: $idPimDecli, id_diffusion: $diffusion->getId(), price: (float) str_replace(',', '.', $lineOC['PRIX_ARTICLE']), date_start: $begin, date_end: $end);
+                $this->timer->start('putCreatePriceSell');
+                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END putCreatePriceSell for OC '.$idPimProduct.'-'.$idPimDecli.' : Time = '.(microtime(true) - $time), 2);
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ OC ('.$idPimProduct.'-'.$idPimDecli.') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
+            }
+        }
+
+        return true;
+    }
+
+    public function cronCleanPrice(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+
+        if (!$this->config['use_oc']) {
+            return true;
+        }
+        
+        $fileName = $this->oc_name.'_tmp';
+        $this->collect->addInfo('START '.__FUNCTION__.', nbCron ('.$nbCron.')');
+        
+        // reset des indexes des json, sinon on risque de travailler avec des indexes obsolètes
+        if (!$nbCron) { // Premier tour de boucle
+            $this->timer->start('DbFile');
+            $tab_json = [];
+            $json = new DbFile($this->oc_name);
+
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+
+            $json->buildIndex('CODE_ARTICLE');
+            $json->buildIndex('PRIX_ARTICLE');
+            $this->timer->stop('DbFile');
+
+            // Archive les PriceSelling qui sont trop ancienne et celle qui ne sont plus dans le flux
+            $sql = 'SELECT ps.oo_id AS idPriceSell, md.data as crossid, ps.price_ttc, REPLACE(oc.PRIX_ARTICLE, ",", ".") AS prix_promo
+                FROM object_query_' . Outils::getIDClass('priceSelling') . ' ps
+                LEFT JOIN object_query_' . Outils::getIDClass('declinaison') . ' d ON d.oo_id = ps.decli__id
+                LEFT JOIN object_metadata_' . Outils::getIDClass('declinaison') . ' md ON d.oo_id = md.id AND md.dest_id = '.$diffusion->getId().' AND `column` = "ext_id"
+                LEFT JOIN ' . $json->getTableName() . ' oc ON oc.CODE_ARTICLE = md.data
+                WHERE 1
+                AND d.oo_id IS NOT NULL
+                AND md.id IS NOT NULL
+                AND ps.date_start IS NOT NULL
+                AND ps.date_end IS NOT NULL
+                AND (ps.archive IS NULL OR ps.archive = 0)
+                AND (oc.CODE_ARTICLE IS NULL OR UNIX_TIMESTAMP(NOW()) > ps.date_end)
+                ORDER BY ps.oo_id';
+            $this->collect->addInfo('Query : '.$sql);
+
+            $this->timer->start('Query');
+            $lst = Outils::query($sql);
+            $this->collect->addInfo('MaxLine ('.count($lst).')');
+            $this->timer->stop('Query');
+
+            if (is_array($lst) && empty($lst)) {
+                return true;
+            }
+
+            // Transformation
+            $this->timer->start('buildFromArray');
+            $ret = DbFile::buildFromArray($lst, $fileName);
+            $this->timer->stop('buildFromArray');
+            if (!is_numeric($ret)) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
+                return false;
+            }
+        }
+
+        $json = new DbFile($fileName);
+
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+            
+            try {
+                $this->timer->start('getById');
+                $obj = DataObject::getById($item['idPriceSell']);
+                $this->timer->stop('getById');
+                $obj->setArchive(1);
+                $obj->setPublished(0);
+                $this->timer->start('save');
+                $obj->save(['versionNote' => 'EcGinkoia ('.__FUNCTION__.') :' . __LINE__]);
+                $this->timer->stop('save');
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur archivage PriceSelling ('.$item['idPriceSell'].') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile());
             }
         }
 
@@ -1749,77 +2291,6 @@ class ecProduct extends FrontendController
         return true;
     }
 
-    public function cronUpdateFluctuMinus(array $params)
-    {
-        $cron = $params['nbParent'] ?? 'manualTest';
-        $nbCron = $params['nbCron'] ?? 1;
-        $stopTime = $params['stopTime'] ?? (time() + 15);
-        $connector = new connector();
-        $diffusion = $connector->getDiffusion();
-
-        $lstGinkoia = array_column(Outils::query('SELECT DISTINCT(CODE_MODELE) FROM `eci_midle_file_catalogue_ginkoia`'), 'CODE_MODELE');
-        
-        $lists = ecMiddleController::getRequireOrDependBy($diffusion->getId(), 'object', false);
-        
-        foreach ($lists as $i => $item) {
-            if ($i < $nbCron) {
-                continue;
-            }
-            if (time() > $stopTime) {
-                return $i;
-            }
-            $obj = DataObject::getById($item['id']);
-            if ('product' != $obj->getClassName()) {
-                continue; // Ce n'est pas un produit
-            }
-
-            $crossid = '';
-            $lstCrossid = $obj->getCrossid();
-            foreach ($lstCrossid as $objCrossid) {
-                if ($objCrossid->getElementId() != $diffusion->getId()) {
-                    continue; // Nous ne sommes pas responsable de ces diffusions
-                }
-                $crossid = $objCrossid->getData()['ext_id'] ?? '';
-            }
-
-            if (empty($crossid)) {
-                continue; // Le crossid est vide
-            }
-            if (in_array($crossid, $lstGinkoia)) {
-                continue; // Le produit est toujours dans le flux
-            }
-
-            if (!Outils::hasTag($obj, 'deref')) {
-                Outils::addTag($obj, 'deref');
-            }
-
-            // Mettre les stock des déclinaisons à 0
-            try {
-                $this->timer->start('setNullStock');
-                $time = microtime(true);
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START setNullStock '.$obj->getId(), 2);
-                Outils::resetStock($obj->getId());
-                // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END setNullStock '.$obj->getId().' : Time = '.(microtime(true) - $time), 2);
-                $this->timer->stop('setNullStock');
-
-            } catch (Exception $e) {
-                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ setNullStock ('.$obj->getId().') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, '', 'error_save');
-            }
-
-            if (1 == $obj->getPublished()) {
-                // Modification du produit
-                try {
-                    $obj->setPublished(false); // On désactive le produit
-                    $obj->save(['versionNote' => '(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ')']);
-                } catch (Exception $e) {
-                    Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur Deref : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile(), 3, $obj, 'error_save');
-                }
-            }
-        }
-
-        return true;
-    }
-
     public function productIsActive($idPimProduct, $diffusion)
     {
         $obj = DataObject::getById($idPimProduct);
@@ -1928,30 +2399,59 @@ class ecProduct extends FrontendController
             return $ret;
         }
 
+        // Catalog
         if ('fillCatalog' == $action) {
-            $retour = $this->cronFillCatalog(['nbCron' => 0]);
+            $retour = $this->cronFillCatalog($data);
+            return $retour;
+        }
+        if ('fluctuMinus' == $action) {
+            $retour = $this->cronUpdateFluctuMinus($data);
+            return $retour;
+        }
+        if ('fluctuMinusFast' == $action) {
+            $retour = $this->cronUpdateFluctuMinusFast($data);
             return $retour;
         }
         
+        // Stock
         if ('updateStock' == $action) {
-            $retour = $this->cronUpdateStock(['nbCron' => 0]);
+            $retour = $this->cronUpdateStock($data);
             return $retour;
         }
+        if ('updateStockFast' == $action) {
+            $retour = $this->cronUpdateStockFast($data);
+            return $retour;
+        }
+
+        // Price
         if ('updatePrice' == $action) {
-            $retour = $this->cronUpdatePrice(['nbCron' => 0]);
+            $retour = $this->cronUpdatePrice($data);
+            return $retour;
+        }
+
+        if ('updatePriceFast' == $action) {
+            $retour = $this->cronUpdatePriceFast($data);
+            return $retour;
+        }
+
+        if ('updatePromo' == $action) {
+            $retour = $this->cronUpdatePromo($data);
+            return $retour;
+        }
+
+        if ('cleanPrice' == $action) {
+            $retour = $this->cronCleanPrice($data);
             return $retour;
         }
         
+        // Sync
         if ('syncGinkoia' == $action) {
             $retour = $this->cronSyncGinkoia([]);
             return $retour;
         }
         
-        if ('fluctuMinus' == $action) {
-            $retour = $this->cronUpdateFluctuMinus([]);
-            return $retour;
-        }
 
+        // Test
         if ('forceUpdateStock' == $action) {
             $retour = $this->forceUpdateStock();
             return $retour;

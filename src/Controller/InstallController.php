@@ -367,7 +367,11 @@ class InstallController extends FrontendController
             ->setListStages('CatalogueGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFile','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronFillCatalog','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateFluctuMinus'])
+            ->setStages([
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFile',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronFillCatalog',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateFluctuMinus'
+            ])
             ->save($connector->getMySign(__LINE__));
             
             
@@ -384,7 +388,10 @@ class InstallController extends FrontendController
             ->setListStages('StockGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFileStock','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateStock',])
+            ->setStages([
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFileStock',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateStockFast',
+            ])
             ->save($connector->getMySign(__LINE__));
 
             
@@ -401,7 +408,12 @@ class InstallController extends FrontendController
             ->setListStages('PriceGinkoia')
             ->setToken('TOKENGINKO')
             ->setPublished(true)
-            ->setStages(['\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFilePrice','\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdatePrice',])
+            ->setStages([
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFilePrice',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdatePriceFast',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdatePromo',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronCleanPrice',
+            ])
             ->save($connector->getMySign(__LINE__));
 
         return true;

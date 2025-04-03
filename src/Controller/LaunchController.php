@@ -93,12 +93,43 @@ class LaunchController extends FrontendController
         return $class->cronUpdateStock($params);
         // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
     }
+    public function cronUpdateStockFast(array $params)
+    {
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
+        $class = new ecProduct();
+        return $class->cronUpdateStockFast($params);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
+    }
 
     public function cronUpdatePrice(array $params)
     {
         // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
         $class = new ecProduct();
         return $class->cronUpdatePrice($params);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
+    }
+
+    public function cronUpdatePriceFast(array $params)
+    {
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
+        $class = new ecProduct();
+        return $class->cronUpdatePriceFast($params);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
+    }
+
+    public function cronUpdatePromo(array $params)
+    {
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
+        $class = new ecProduct();
+        return $class->cronUpdatePromo($params);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
+    }
+
+    public function cronCleanPrice(array $params)
+    {
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
+        $class = new ecProduct();
+        return $class->cronCleanPrice($params);
         // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
     }
 
@@ -115,6 +146,14 @@ class LaunchController extends FrontendController
         // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
         $class = new ecProduct();
         return $class->cronUpdateFluctuMinus($params);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
+    }
+
+    public function cronUpdateFluctuMinusFast(array $params)
+    {
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
+        $class = new ecProduct();
+        return $class->cronUpdateFluctuMinusFast($params);
         // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
     }
 }
