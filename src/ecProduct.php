@@ -381,7 +381,8 @@ class ecProduct extends FrontendController
                         list($item['rights'], $item['number'], $item['user'], $item['group'], $item['size'], $item['month'], $item['day'], $item['time']) = $chunks;
                         $item['type'] = ($chunks[0][0] === 'd') ? 'directory' : 'file';
                         $item['name'] = preg_replace('/^([^\s]+\s+){8}/', '', $child); // get name by cutting the data
-                        $item['mtime'] = strtotime(implode('-', [date('Y'), $item['month'], $item['day']]).' '.implode(':', [$item['time'], '00']));
+                        // $item['mtime'] = strtotime(implode('-', [date('Y'), $item['month'], $item['day']]).' '.implode(':', [$item['time'], '00']));
+                        $item['mtime'] = ftp_mdtm($this->trans_stream, $item['name']);
                         $files[$item['name']] = $item;
                     }
                 }
@@ -1714,7 +1715,7 @@ class ecProduct extends FrontendController
             $json->buildIndex('MAG_ID');
             $this->timer->stop('DbFile');
             
-            $sql = 'SELECT DISTINCT(g.MAG_ID AS location) FROM ' . $json->getTableName() . ' g';
+            $sql = 'SELECT DISTINCT(g.MAG_ID) AS location FROM ' . $json->getTableName() . ' g';
             $this->collect->addInfo('Query : '.$sql);
 
             $this->timer->start('Query');
