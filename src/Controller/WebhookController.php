@@ -228,7 +228,7 @@ class WebhookController extends FrontendController
             'DateReglement' => $order->getDate_add()->format('Y-m-d H:i:s').'.00',
             'Export' => 0,
             'Client' => [
-                'CodeClient' => substr($customer->getId_customer(), 0, 9),
+                'CodeClient' => substr($customer->getId(), 0, 9),
                 'Email' => ('client@zalando.fr' == $customer->getEmail()) ? ($customer->getId_customer.$customer->getEmail()) : $customer->getEmail(),
                 'AddressFact' => [
                     'Civ' => '',

@@ -370,7 +370,7 @@ class InstallController extends FrontendController
             ->setStages([
                 '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFile',
                 '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronFillCatalog',
-                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateFluctuMinus'
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateFluctuMinusFast'
             ])
             ->save($connector->getMySign(__LINE__));
             
@@ -390,6 +390,7 @@ class InstallController extends FrontendController
             ->setPublished(true)
             ->setStages([
                 '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronGetFileStock',
+                '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateEntrepot',
                 '\bundles\ecGinkoiaBundle\src\Controller\LaunchController::cronUpdateStockFast',
             ])
             ->save($connector->getMySign(__LINE__));

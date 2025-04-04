@@ -156,4 +156,12 @@ class LaunchController extends FrontendController
         return $class->cronUpdateFluctuMinusFast($params);
         // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
     }
+
+    public function cronUpdateEntrepot(array $params)
+    {
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - START : '.json_encode($params), 3);
+        $class = new ecProduct();
+        return $class->cronUpdateEntrepot($params);
+        // Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - END : '.json_encode($params), 3);
+    }
 }

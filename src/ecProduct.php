@@ -1690,6 +1690,87 @@ class ecProduct extends FrontendController
         return true;
     } 
 
+    public function cronUpdateEntrepot(array $params)
+    {
+        $cron = $params['nbParent'] ?? 'manualTest';
+        $nbCron = $params['nbCron'] ?? 0;
+        $stopTime = $params['stopTime'] ?? (time() + 15);
+        $connector = new connector();
+        $diffusion = $connector->getDiffusion();
+        
+        $fileName = $this->stock_name.'_entrepot_tmp';
+        $this->collect->addInfo('START '.__FUNCTION__.', nbCron ('.$nbCron.')');
+
+        $this->timer->start('DbFile');
+        $tab_json = [];
+        $json = new DbFile($this->stock_name);
+
+        if (!$nbCron) { // Premier tour de boucle
+            foreach ($tab_json as $objBigjson) {
+                $objBigjson->deleteIndex();
+            }
+            $json->deleteIndex();
+
+            $json->buildIndex('MAG_ID');
+            $this->timer->stop('DbFile');
+            
+            $sql = 'SELECT DISTINCT(g.MAG_ID AS location) FROM ' . $json->getTableName() . ' g';
+            $this->collect->addInfo('Query : '.$sql);
+
+            $this->timer->start('Query');
+            $lst = Outils::query($sql);
+            $this->collect->addInfo('MaxLine ('.count($lst).')');
+            $this->timer->stop('Query');
+
+            if (is_array($lst) && empty($lst)) {
+                return false;
+            }
+
+            // Transformation
+            $this->timer->start('buildFromArray');
+            $ret = DbFile::buildFromArray($lst, $fileName);
+            $this->timer->stop('buildFromArray');
+            if (!is_numeric($ret)) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur lors de la création du DbFile '.$fileName.' : '.var_export($ret, true), 3);
+                return false;
+            }
+        }
+
+        $json = new DbFile($fileName);
+
+        $json->go($nbCron);
+        while ($item = $json->read()) {
+            if ((time() > $stopTime) && ($json->currentLine > $nbCron)) {
+                return $json->currentLine;
+            }
+
+            $this->collect->addInfo('Entrepot ('.$item['location'].')');
+
+            try {
+                // Récupération de l'ID d'entrepôt
+                $this->timer->start('getObjectByCrossId_entrepot');
+                $idPimEntrepot =  Outils::getObjectByCrossId($item['location'], 'entrepot', $diffusion);
+                $this->timer->stop('getObjectByCrossId_entrepot');
+                if (!$idPimEntrepot) {
+                    $tab_entrepot = [
+                        'id' => $item['location'],
+                        'active' => true,
+                        'name' => $item['location'],
+                        // 'physique' => 1,
+                    ];
+                    $entrepot = json_decode(json_encode($tab_entrepot));
+                    $this->timer->start('putCreateDepot');
+                    $idPimEntrepot = Outils::putCreateDepot($entrepot, $diffusion, 1, '');
+                    $this->timer->stop('putCreateDepot');
+                }
+            } catch (Exception $e) {
+                Outils::addLog('(EcGinkoia ('.__FUNCTION__.') :' . __LINE__ . ') - Erreur MAJ Entrepot ('.$item['location'].') : ' . $e->getMessage() . ' in line ' . $e->getLine() . ' of file ' . $e->getFile());
+            }
+        }
+
+        return true;
+    }
+
     public function cronUpdateStockFast(array $params)
     {
         $cron = $params['nbParent'] ?? 'manualTest';
@@ -1718,21 +1799,18 @@ class ecProduct extends FrontendController
             $this->timer->stop('DbFile');
             
             // Récupérer la liste des lignes dont les stocks ont été modifié ou sont vide
-            $sql = 'SELECT g.CODE_ARTICLE AS crossid, g.MAG_ID AS location, g.QTE_STOCK AS newStock, p.oo_id AS idPimProduct, d.oo_id AS idPimDecli, e.oo_id AS idPimEntrepot, s.quantity_physique, s.stock_entrepot__id
+            $sql = 'SELECT g.CODE_ARTICLE AS crossid, g.MAG_ID AS location, g.QTE_STOCK AS newStock, p.id AS idPimProduct, d.oo_id AS idPimDecli, e.id AS idPimEntrepot, s.quantity_physique, s.stock_entrepot__id
                 FROM ' . $json->getTableName() . ' g
-                LEFT JOIN object_metadata_' . Outils::getIDClass('entrepot') . ' me ON me.dest_id = '.$diffusion->getId().' AND me.`column` = "ext_id" AND g.MAG_ID = me.data
-                LEFT JOIN object_query_' . Outils::getIDClass('entrepot') . ' e ON e.oo_id = me.id AND (e.archive IS NULL OR e.archive = 0)
-                LEFT JOIN object_metadata_' . Outils::getIDClass('declinaison') . ' md ON md.dest_id = '.$diffusion->getId().' AND md.`column` = "ext_id" AND g.CODE_ARTICLE = md.data
-                LEFT JOIN object_query_' . Outils::getIDClass('declinaison') . ' d ON d.oo_id = md.id AND (d.archive IS NULL OR d.archive = 0)
-                LEFT JOIN object_relations_' . Outils::getIDClass('product') . ' rp ON rp.dest_id = d.oo_id AND rp.fieldname = "decli"
-                LEFT JOIN object_query_' . Outils::getIDClass('product') . ' p ON p.oo_id = rp.src_id AND (p.archive IS NULL OR p.archive = 0)
-                LEFT JOIN object_query_' . Outils::getIDClass('stock') . ' s ON p.oo_id = s.stock_product__id AND d.oo_id = s.stock_declinaison__id AND (s.archive IS NULL OR s.archive = 0) AND e.oo_id = s.stock_entrepot__id
+                LEFT JOIN object_' . Outils::getIDClass('entrepot') . ' e ON e.crossid LIKE "%,object|'.$diffusion->getId().',%" AND g.MAG_ID = e.name AND (e.archive IS NULL OR e.archive = 0)
+                LEFT JOIN object_' . Outils::getIDClass('declinaison') . ' d ON d.crossid LIKE "%,object|'.$diffusion->getId().',%" AND g.CODE_ARTICLE = d.reference_declinaison AND (d.archive IS NULL OR d.archive = 0)
+                LEFT JOIN object_' . Outils::getIDClass('product') . ' p ON p.crossid LIKE "%,object|'.$diffusion->getId().',%" AND d.parentId = p.id AND (p.archive IS NULL OR p.archive = 0)
+                LEFT JOIN object_' . Outils::getIDClass('stock') . ' s ON p.id = s.stock_product__id AND d.id = s.stock_declinaison__id AND (s.archive IS NULL OR s.archive = 0) AND e.id = s.stock_entrepot__id
                 WHERE 1
-                AND d.oo_id IS NOT NULL
-                AND p.oo_id IS NOT NULL
-                AND (g.QTE_STOCK != s.quantity_physique OR s.oo_id IS NULL)  
-                AND (g.QTE_STOCK != 0 AND s.oo_id IS NULL)  
-                ORDER BY p.oo_id ASC';
+                AND d.id IS NOT NULL
+                AND p.id IS NOT NULL
+                AND e.id IS NOT NULL
+                AND ((g.QTE_STOCK != s.quantity_physique) OR (g.QTE_STOCK != 0 AND s.id IS NOT NULL))
+                ORDER BY p.id ASC';
             $this->collect->addInfo('Query : '.$sql);
 
             $this->timer->start('Query');
@@ -1950,17 +2028,15 @@ class ecProduct extends FrontendController
             $this->timer->stop('DbFile');
 
             // Récupérer la liste des lignes dont les déclinaisons n'ont pas le bon prix ou n'ont pas de prix
-            $sql = 'SELECT g.CODE_ARTICLE AS crossid, REPLACE(g.PXVTE, ",", ".") AS newPrice, ps.oo_id AS idPimPriceSelling, ps.price_ttc AS oldPrice
+            $sql = 'SELECT g.CODE_ARTICLE AS crossid, REPLACE(g.PXVTE, ",", ".") AS newPrice, ps.id AS idPimPriceSelling, ps.price_ttc AS oldPrice
                 FROM ' . $json->getTableName() . ' g
-                LEFT JOIN object_metadata_' . Outils::getIDClass('declinaison') . ' md ON md.dest_id = '.$diffusion->getId().' AND `column` = "ext_id" AND g.CODE_ARTICLE = md.data
-                LEFT JOIN object_query_' . Outils::getIDClass('declinaison') . ' d ON d.oo_id = md.id AND (d.archive IS NULL OR d.archive = 0)
-                LEFT JOIN object_relations_' . Outils::getIDClass('product') . ' rp ON rp.dest_id = d.oo_id AND rp.fieldname = "decli"
-                LEFT JOIN object_query_' . Outils::getIDClass('product') . ' p ON p.oo_id = rp.src_id AND (p.archive IS NULL OR p.archive = 0)
-                LEFT JOIN object_query_' . Outils::getIDClass('priceSelling') . ' ps ON d.oo_id = ps.decli__id AND ps.date_start IS NULL AND ps.date_end IS NULL AND (ps.archive IS NULL OR ps.archive = 0)
+                LEFT JOIN object_' . Outils::getIDClass('declinaison') . ' d ON d.reference_declinaison = g.CODE_ARTICLE AND d.crossid LIKE "%,object|'.$diffusion->getId().',%" AND (d.archive IS NULL OR d.archive = 0)
+                LEFT JOIN object_' . Outils::getIDClass('product') . ' p ON d.parentId = p.id AND d.crossid LIKE "%,object|'.$diffusion->getId().',%" AND (p.archive IS NULL OR p.archive = 0)
+                LEFT JOIN object_' . Outils::getIDClass('priceSelling') . ' ps ON d.id = ps.decli__id AND ps.date_start IS NULL AND ps.date_end IS NULL AND (ps.archive IS NULL OR ps.archive = 0)
                 WHERE 1
-                AND d.oo_id IS NOT NULL
-                AND p.oo_id IS NOT NULL
-                AND (REPLACE(g.PXVTE, ",", ".") != ps.price_ttc OR ps.price_ttc IS NULL)';
+                AND d.id IS NOT NULL
+                AND p.id IS NOT NULL
+                AND ((REPLACE(g.PXVTE, ",", ".") != ps.price_ttc) OR ps.price_ttc IS NULL)';
             $this->collect->addInfo('Query : '.$sql);
             
             $this->timer->start('Query');
@@ -2122,19 +2198,17 @@ class ecProduct extends FrontendController
             $this->timer->stop('DbFile');
 
             // Archive les PriceSelling qui sont trop ancienne et celle qui ne sont plus dans le flux
-            $sql = 'SELECT ps.oo_id AS idPriceSell, md.data as crossid, ps.price_ttc, REPLACE(oc.PRIX_ARTICLE, ",", ".") AS prix_promo
-                FROM object_query_' . Outils::getIDClass('priceSelling') . ' ps
-                LEFT JOIN object_query_' . Outils::getIDClass('declinaison') . ' d ON d.oo_id = ps.decli__id
-                LEFT JOIN object_metadata_' . Outils::getIDClass('declinaison') . ' md ON d.oo_id = md.id AND md.dest_id = '.$diffusion->getId().' AND `column` = "ext_id"
-                LEFT JOIN ' . $json->getTableName() . ' oc ON oc.CODE_ARTICLE = md.data
+            $sql = 'SELECT ps.id AS idPriceSell, d.crossid, ps.price_ttc, REPLACE(oc.PRIX_ARTICLE, ",", ".") AS prix_promo
+                FROM object_' . Outils::getIDClass('priceSelling') . ' ps
+                LEFT JOIN object_' . Outils::getIDClass('declinaison') . ' d ON d.parentId = ps.decli__id AND d.crossid LIKE "%,object|'.$diffusion->getId().',%" AND (d.archive IS NULL OR d.archive = 0)
+                LEFT JOIN ' . $json->getTableName() . ' oc ON oc.CODE_ARTICLE = d.reference_declinaison
                 WHERE 1
-                AND d.oo_id IS NOT NULL
-                AND md.id IS NOT NULL
+                AND d.id IS NOT NULL
                 AND ps.date_start IS NOT NULL
                 AND ps.date_end IS NOT NULL
                 AND (ps.archive IS NULL OR ps.archive = 0)
                 AND (oc.CODE_ARTICLE IS NULL OR UNIX_TIMESTAMP(NOW()) > ps.date_end)
-                ORDER BY ps.oo_id';
+                ORDER BY ps.id';
             $this->collect->addInfo('Query : '.$sql);
 
             $this->timer->start('Query');
@@ -2420,6 +2494,10 @@ class ecProduct extends FrontendController
         }
         if ('updateStockFast' == $action) {
             $retour = $this->cronUpdateStockFast($data);
+            return $retour;
+        }
+        if ('updateEntrepot' == $action) {
+            $retour = $this->cronUpdateEntrepot($data);
             return $retour;
         }
 
